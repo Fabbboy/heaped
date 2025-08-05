@@ -1,23 +1,14 @@
 extern crate alloc;
 
-use alloc::alloc::{
-  AllocError,
-  Allocator,
-  Global,
-  Layout,
-};
-use core::{
-  cell::RefCell,
-  mem,
-  ptr::NonNull,
-};
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use core::{cell::RefCell, mem, ptr::NonNull};
 
-use crate::{
-  arena::chunck::ArenaChunck,
-  once::Once,
-};
+use crate::{arena::chunck::ArenaChunck, once::Once};
 
 type TypedChunk<'arena, T, A> = ArenaChunck<&'arena A, T, true>;
+type ChunkPtr<'arena, T, A> = NonNull<TypedChunk<'arena, T, A>>;
+type MaybeChunkPtr<'arena, T, A> = Option<ChunkPtr<'arena, T, A>>;
+type Head<'arena, T, A> = Once<ChunkPtr<'arena, T, A>>;
 
 pub struct TypedArena<'arena, T, A = Global>
 where
@@ -26,7 +17,7 @@ where
 {
   allocator: A,
   csize: usize,
-  head: RefCell<Once<NonNull<TypedChunk<'arena, T, A>>>>,
+  head: RefCell<Head<'arena, T, A>>,
   layout: Layout,
 }
 
@@ -48,8 +39,8 @@ where
 
   fn new_chunk(
     &self,
-    prev: Option<NonNull<TypedChunk<'arena, T, A>>>,
-  ) -> Result<NonNull<TypedChunk<'arena, T, A>>, AllocError> {
+    prev: MaybeChunkPtr<'arena, T, A>,
+  ) -> Result<ChunkPtr<'arena, T, A>, AllocError> {
     let chunk_ptr = self.allocator.allocate(self.layout)?;
     let chunk: *mut TypedChunk<'arena, T, A> = chunk_ptr.as_ptr() as *mut TypedChunk<'arena, T, A>;
 
