@@ -36,7 +36,7 @@ impl<'arena, A> DroplessArena<'arena, A>
 where
   A: Allocator,
 {
-  fn inner_mut(&self) -> &mut DroplessArenaInner<'arena, A> {
+  unsafe fn inner_mut(&self) -> &mut DroplessArenaInner<'arena, A> {
     // SAFETY: callers ensure exclusive access
     unsafe { &mut *self.inner.get() }
   }
@@ -90,7 +90,7 @@ where
   A: Allocator,
 {
   fn drop(&mut self) {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     if let Some(chunk) = inner.head.get() {
       // SAFETY: chunk is the head of a valid list
       unsafe {
@@ -113,7 +113,7 @@ where
   A: Allocator,
 {
   fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     let mut current = match inner.head.get() {
       Some(h) => *h,
       None => {
@@ -140,16 +140,18 @@ where
   }
 
   unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     if let Some(mut current) = inner.head.get().copied() {
       loop {
-        if current.as_ref().contains(ptr.as_ptr()) {
-          current.as_ref().deallocate(ptr, layout);
-          break;
-        }
-        match current.as_ref().next() {
-          Some(next) => current = next,
-          None => break,
+        unsafe {
+          if current.as_ref().contains(ptr.as_ptr()) {
+            current.as_ref().deallocate(ptr, layout);
+            break;
+          }
+          match current.as_ref().next() {
+            Some(next) => current = next,
+            None => break,
+          }
         }
       }
     }
@@ -161,36 +163,40 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let head = self.inner_mut().head.get().copied();
+    let head = unsafe { self.inner_mut() }.head.get().copied();
     if let Some(mut current) = head {
       loop {
-        if current.as_ref().contains(ptr.as_ptr()) {
-          match current.as_ref().grow(ptr, old_layout, new_layout) {
-            Ok(res) => return Ok(res),
-            Err(_) => {
-              let new_block = self.allocate(new_layout)?;
-              ptr::copy_nonoverlapping(
-                ptr.as_ptr(),
-                new_block.as_ptr() as *mut u8,
-                old_layout.size(),
-              );
-              current.as_ref().deallocate(ptr, old_layout);
-              return Ok(new_block);
+        unsafe {
+          if current.as_ref().contains(ptr.as_ptr()) {
+            match current.as_ref().grow(ptr, old_layout, new_layout) {
+              Ok(res) => return Ok(res),
+              Err(_) => {
+                let new_block = self.allocate(new_layout)?;
+                ptr::copy_nonoverlapping(
+                  ptr.as_ptr(),
+                  new_block.as_ptr() as *mut u8,
+                  old_layout.size(),
+                );
+                current.as_ref().deallocate(ptr, old_layout);
+                return Ok(new_block);
+              }
             }
           }
-        }
-        match current.as_ref().next() {
-          Some(next) => current = next,
-          None => break,
+          match current.as_ref().next() {
+            Some(next) => current = next,
+            None => break,
+          }
         }
       }
     }
     let new_block = self.allocate(new_layout)?;
-    ptr::copy_nonoverlapping(
-      ptr.as_ptr(),
-      new_block.as_ptr() as *mut u8,
-      old_layout.size(),
-    );
+    unsafe {
+      ptr::copy_nonoverlapping(
+        ptr.as_ptr(),
+        new_block.as_ptr() as *mut u8,
+        old_layout.size(),
+      );
+    }
     Ok(new_block)
   }
 
@@ -200,36 +206,40 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let head = self.inner_mut().head.get().copied();
+    let head = unsafe { self.inner_mut() }.head.get().copied();
     if let Some(mut current) = head {
       loop {
-        if current.as_ref().contains(ptr.as_ptr()) {
-          match current.as_ref().shrink(ptr, old_layout, new_layout) {
-            Ok(res) => return Ok(res),
-            Err(_) => {
-              let new_block = self.allocate(new_layout)?;
-              ptr::copy_nonoverlapping(
-                ptr.as_ptr(),
-                new_block.as_ptr() as *mut u8,
-                new_layout.size(),
-              );
-              current.as_ref().deallocate(ptr, old_layout);
-              return Ok(new_block);
+        unsafe {
+          if current.as_ref().contains(ptr.as_ptr()) {
+            match current.as_ref().shrink(ptr, old_layout, new_layout) {
+              Ok(res) => return Ok(res),
+              Err(_) => {
+                let new_block = self.allocate(new_layout)?;
+                ptr::copy_nonoverlapping(
+                  ptr.as_ptr(),
+                  new_block.as_ptr() as *mut u8,
+                  new_layout.size(),
+                );
+                current.as_ref().deallocate(ptr, old_layout);
+                return Ok(new_block);
+              }
             }
           }
-        }
-        match current.as_ref().next() {
-          Some(next) => current = next,
-          None => break,
+          match current.as_ref().next() {
+            Some(next) => current = next,
+            None => break,
+          }
         }
       }
     }
     let new_block = self.allocate(new_layout)?;
-    ptr::copy_nonoverlapping(
-      ptr.as_ptr(),
-      new_block.as_ptr() as *mut u8,
-      new_layout.size(),
-    );
+    unsafe {
+      ptr::copy_nonoverlapping(
+        ptr.as_ptr(),
+        new_block.as_ptr() as *mut u8,
+        new_layout.size(),
+      );
+    }
     Ok(new_block)
   }
 }
