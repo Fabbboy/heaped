@@ -7,3 +7,4 @@ pub mod arena;
 pub mod once;
 pub mod slab;
 pub mod fixed;
+pub mod bitmap;

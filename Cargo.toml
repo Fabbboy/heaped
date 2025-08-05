@@ -1,8 +1,7 @@
 [package]
 name = "heaped"
 version = "0.1.0"
-edition = "2024" # DO NOT CHANGE
-build = "build.rs"
+edition = "2024" # DO NOT CHANGE 
 
 [lib]
 crate-type = ["cdylib", "staticlib"]

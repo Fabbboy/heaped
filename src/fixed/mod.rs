@@ -7,7 +7,7 @@ use core::{
   cell::UnsafeCell,
   ptr::NonNull,
 };
-use std::ptr;
+use core::ptr;
 
 struct FixedInner<'fixed> {
   mem: &'fixed mut [u8],
