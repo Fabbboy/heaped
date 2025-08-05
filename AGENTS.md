@@ -8,3 +8,4 @@
 - Unsafe is allowed and probably needed but the final user facing api (except trait implementations) should be as safe as possible.
 - Do not comment unless its a `SAFETY` comment.
 - Ensure everything manually allocated is free eventually.
+- Allocators cannot be copied nor cloned. This is fundamentally wrong. NEVER CLONE ALLOCATORS 
