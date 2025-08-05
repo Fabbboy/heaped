@@ -1,5 +1,5 @@
 mod slab;
-pub use slab::Slab;
+pub use slab::SlabAllocator;
 
 #[cfg(test)]
 mod tests;

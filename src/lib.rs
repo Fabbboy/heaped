@@ -6,3 +6,4 @@ extern crate alloc;
 pub mod arena;
 pub mod once;
 pub mod slab;
+pub mod fixed;

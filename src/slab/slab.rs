@@ -31,23 +31,23 @@ struct SlabInner<T, A: Allocator> {
   len: usize,
 }
 
-pub struct Slab<T, A: Allocator = Global> {
+pub struct SlabAllocator<T, A: Allocator = Global> {
   inner: UnsafeCell<SlabInner<T, A>>,
 }
 
-impl<T> Slab<T, Global> {
+impl<T> SlabAllocator<T, Global> {
   pub fn new() -> Self {
     Self::new_in(Global)
   }
 }
 
-impl<T> Default for Slab<T, Global> {
+impl<T> Default for SlabAllocator<T, Global> {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl<T, A: Allocator> Slab<T, A> {
+impl<T, A: Allocator> SlabAllocator<T, A> {
   pub fn new_in(alloc: A) -> Self {
     Self {
       inner: UnsafeCell::new(SlabInner {
@@ -148,7 +148,7 @@ impl<T, A: Allocator> SlabInner<T, A> {
   }
 }
 
-unsafe impl<T, A: Allocator> Allocator for Slab<T, A> {
+unsafe impl<T, A: Allocator> Allocator for SlabAllocator<T, A> {
   fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
     if layout.size() != core::mem::size_of::<T>() || layout.align() != core::mem::align_of::<T>() {
       return Err(AllocError);
@@ -200,7 +200,7 @@ unsafe impl<T, A: Allocator> Allocator for Slab<T, A> {
   }
 }
 
-impl<T, A: Allocator> Drop for Slab<T, A> {
+impl<T, A: Allocator> Drop for SlabAllocator<T, A> {
   fn drop(&mut self) {
     let inner = self.inner_mut();
     for idx in 0..inner.slots.len() {
