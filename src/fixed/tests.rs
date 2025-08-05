@@ -1,4 +1,4 @@
-use super::fixed::FixedAllocator;
+use super::FixedAllocator;
 use alloc::alloc::{
   Allocator,
   Layout,
