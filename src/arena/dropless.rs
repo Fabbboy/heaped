@@ -1,9 +1,9 @@
 use alloc::alloc::{AllocError, Allocator, Global, Layout};
-use core::{cell::RefCell, ptr::{self, NonNull}};
+use core::{cell::RefCell, ptr::NonNull};
 
 use crate::{arena::chunck::ArenaChunck, once::Once};
 
-type DroplessChunk<'arena, A> = ArenaChunck<u8, false, &'arena A>;
+type DroplessChunk<'arena, A> = ArenaChunck<&'arena A, u8, false>;
 
 pub struct DroplessArena<'arena, A = Global>
 where
@@ -83,7 +83,7 @@ where
                     let next = (*current).next().borrow_mut().take();
                     self.allocator
                         .deallocate(NonNull::new_unchecked(current as *mut u8), self.layout);
-                    current = next.map_or(ptr::null_mut(), |n| n.as_ptr());
+                    current = next.map_or(core::ptr::null_mut(), |n| n.as_ptr());
                 }
             }
         }

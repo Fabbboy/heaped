@@ -1,23 +1,21 @@
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
-use core::{
-    cell::RefCell,
-    mem::{self, MaybeUninit},
-    ptr::NonNull,
-    slice,
-};
+extern crate alloc;
+
+use alloc::alloc::{AllocError, Allocator, Layout};
+use core::mem;
+use core::{cell::RefCell, mem::MaybeUninit, ptr::NonNull};
 use getset::Getters;
 
 #[derive(Debug, Getters)]
-pub(crate) struct ArenaChunck<T = u8, const DROP: bool = false, A = Global>
+pub(crate) struct ArenaChunck<A, T = u8, const DROP: bool = false>
 where
     T: Sized,
     A: Allocator,
 {
     allocator: A,
     #[getset(get = "pub(crate)")]
-    prev: RefCell<Option<NonNull<ArenaChunck<T, DROP, A>>>>,
+    prev: RefCell<Option<NonNull<ArenaChunck<A, T, DROP>>>>,
     #[getset(get = "pub(crate)")]
-    next: RefCell<Option<NonNull<ArenaChunck<T, DROP, A>>>>,
+    next: RefCell<Option<NonNull<ArenaChunck<A, T, DROP>>>>,
     start: *mut u8,
     stop: *mut u8,
     #[getset(get = "pub(crate)")]
@@ -28,7 +26,7 @@ where
     capacity: usize,
 }
 
-impl<T, const DROP: bool, A> ArenaChunck<T, DROP, A>
+impl<A, T, const DROP: bool> ArenaChunck<A, T, DROP>
 where
     T: Sized,
     A: Allocator,
@@ -57,7 +55,7 @@ where
     }
 }
 
-impl<T, const DROP: bool, A> ArenaChunck<T, DROP, A>
+impl<A, T, const DROP: bool> ArenaChunck<A, T, DROP>
 where
     T: Sized,
     A: Allocator,
@@ -76,7 +74,7 @@ where
     }
 }
 
-unsafe impl<T, const DROP: bool, A> Allocator for ArenaChunck<T, DROP, A>
+unsafe impl<A, T, const DROP: bool> Allocator for ArenaChunck<A, T, DROP>
 where
     T: Sized,
     A: Allocator,
@@ -93,7 +91,7 @@ where
 
         let ptr = unsafe { self.storage.as_ptr().add(start) as *mut u8 };
         let byte_count = needed * mem::size_of::<T>();
-        Ok(unsafe { NonNull::new_unchecked(slice::from_raw_parts_mut(ptr, byte_count)) })
+        Ok(unsafe { NonNull::new_unchecked(core::slice::from_raw_parts_mut(ptr, byte_count)) })
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
@@ -117,7 +115,7 @@ where
     }
 }
 
-impl<T, const DROP: bool, A> Drop for ArenaChunck<T, DROP, A>
+impl<A, T, const DROP: bool> Drop for ArenaChunck<A, T, DROP>
 where
     T: Sized,
     A: Allocator,
