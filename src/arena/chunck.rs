@@ -35,7 +35,7 @@ where
     T: Sized,
     A: Allocator,
 {
-    pub(crate) fn try_new_in(allocator: A, capacity: usize) -> Result<Self, AllocError> {
+    pub(crate) fn try_new(allocator: A, capacity: usize) -> Result<Self, AllocError> {
         let layout = Layout::array::<MaybeUninit<T>>(capacity).unwrap();
         let raw: NonNull<[u8]> = allocator.allocate(layout).map_err(|_| AllocError)?;
         let storage = unsafe { NonNull::new_unchecked(raw.as_ptr() as *mut MaybeUninit<T>) };
@@ -53,22 +53,8 @@ where
         })
     }
 
-    pub(crate) fn new_in(allocator: A, capacity: usize) -> Self {
-        Self::try_new_in(allocator, capacity)
-            .unwrap_or_else(|_| panic!("Failed to allocate arena chunk of capacity {}", capacity))
-    }
-}
-
-impl<T, const DROP: bool> ArenaChunck<T, DROP, Global>
-where
-    T: Sized,
-{
-    pub(crate) fn try_new(capacity: usize) -> Result<Self, AllocError> {
-        Self::try_new_in(Global, capacity)
-    }
-
-    pub(crate) fn new(capacity: usize) -> Self {
-        Self::try_new(capacity)
+    pub(crate) fn new(allocator: A, capacity: usize) -> Self {
+        Self::try_new(allocator, capacity)
             .unwrap_or_else(|_| panic!("Failed to allocate arena chunk of capacity {}", capacity))
     }
 }

@@ -1,8 +1,7 @@
-use std::{
-    alloc::{AllocError, Allocator, Global, Layout},
-    cell::RefCell,
-    ptr::NonNull,
-};
+extern crate alloc;
+
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use core::{cell::RefCell, ptr::NonNull};
 
 use crate::{arena::chunck::ArenaChunck, once::Once};
 
@@ -12,10 +11,10 @@ pub struct DroplessArena<'arena, A = Global>
 where
     A: Allocator,
 {
+    allocator: A,
     csize: usize,
     head: RefCell<Once<NonNull<DroplessChunk<'arena, A>>>>,
     layout: Layout,
-    allocator: A,
 }
 
 impl<'arena, A> DroplessArena<'arena, A>
@@ -42,8 +41,9 @@ where
         let chunk: *mut DroplessChunk<'arena, A> =
             chunk_ptr.as_ptr() as *mut DroplessChunk<'arena, A>;
 
+        let allocator: &'arena A = unsafe { &*(&self.allocator as *const A) };
         let non_null_ptr = unsafe {
-            chunk.write(DroplessChunk::new_in(&self.allocator, self.csize));
+            chunk.write(DroplessChunk::new(allocator, self.csize));
             NonNull::new_unchecked(chunk)
         };
 
@@ -97,18 +97,45 @@ where
     A: Allocator,
 {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        // 1. Get the head if not initialized do it
-        // 2. recursively find a chunk that has space
-        // 3.1 if no chunk found, create a new one
-        // 3.2 if chunk found, allocate from it
-        todo!()
+        let mut head = self.head.borrow_mut();
+        let mut current = match head.get() {
+            Some(h) => *h,
+            None => {
+                let new_head = self.new_chunk(None)?;
+                let _ = head.init(new_head);
+                new_head
+            }
+        };
+        drop(head);
+
+        loop {
+            unsafe {
+                if current.as_ref().has_space(layout) {
+                    return current.as_ref().allocate(layout);
+                }
+                if let Some(next) = *current.as_ref().next().borrow() {
+                    current = next;
+                } else {
+                    let new = self.new_chunk(Some(current))?;
+                    return new.as_ref().allocate(layout);
+                }
+            }
+        }
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        // Dropless arena has the word "dropless" in its name which means data inside the arena is not freed
-        // but the underlying memory can be reused thats why we need to deallocate in the chunck which might free up new memory for the future
-        // but T it self is not freed
-        todo!()
+        if let Some(mut current) = self.head.borrow().get().copied() {
+            loop {
+                if unsafe { current.as_ref().contains(ptr.as_ptr()) } {
+                    unsafe { current.as_ref().deallocate(ptr, layout) };
+                    break;
+                }
+                match unsafe { *current.as_ref().next().borrow() } {
+                    Some(next) => current = next,
+                    None => break,
+                }
+            }
+        }
     }
 }
 
@@ -124,8 +151,10 @@ mod tests {
         let string_slice = unsafe { string_raw.as_mut() };
         string_slice.copy_from_slice(b"HelloWorld");
 
+        let str_ref = unsafe { core::str::from_utf8_unchecked(string_slice) };
+
         assert_eq!(string_slice, b"HelloWorld");
-        println!("Allocated string: {:?}", string_slice);
-        // if this segfaults we know where to work on
+        assert_eq!(str_ref, "HelloWorld");
+        println!("String from arena: {}", str_ref);
     }
 }
