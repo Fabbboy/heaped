@@ -1,3 +1,3 @@
-pub(crate) mod chunck;
+pub(crate) mod chunk;
 pub mod dropless;
 pub mod typed;

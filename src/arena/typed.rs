@@ -13,11 +13,11 @@ use core::{
 };
 
 use crate::{
-  arena::chunck::ArenaChunck,
+  arena::chunk::Arenachunk,
   once::Once,
 };
 
-type TypedChunk<'arena, T, A> = ArenaChunck<&'arena A, T, true>;
+type TypedChunk<'arena, T, A> = Arenachunk<&'arena A, T, true>;
 
 pub struct TypedArena<'arena, T, A = Global>
 where
@@ -55,7 +55,7 @@ where
 
     let allocator: &'arena A = unsafe { &*(&self.allocator as *const A) };
     let non_null_ptr = unsafe {
-      chunk.write(ArenaChunck::new(allocator, self.csize));
+      chunk.write(Arenachunk::new(allocator, self.csize));
       NonNull::new_unchecked(chunk)
     };
 

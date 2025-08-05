@@ -10,11 +10,11 @@ use core::{
 };
 
 use crate::{
-  arena::chunck::ArenaChunck,
+  arena::chunk::Arenachunk,
   once::Once,
 };
 
-type DroplessChunk<'arena, A> = ArenaChunck<&'arena A, u8, false>;
+type DroplessChunk<'arena, A> = Arenachunk<&'arena A, u8, false>;
 
 pub struct DroplessArena<'arena, A = Global>
 where

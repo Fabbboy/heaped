@@ -14,16 +14,16 @@ use core::{
 use getset::Getters;
 
 #[derive(Debug, Getters)]
-pub(crate) struct ArenaChunck<A, T = u8, const DROP: bool = false>
+pub(crate) struct Arenachunk<A, T = u8, const DROP: bool = false>
 where
   T: Sized,
   A: Allocator,
 {
   allocator: A,
   #[getset(get = "pub(crate)")]
-  prev: RefCell<Option<NonNull<ArenaChunck<A, T, DROP>>>>,
+  prev: RefCell<Option<NonNull<Arenachunk<A, T, DROP>>>>,
   #[getset(get = "pub(crate)")]
-  next: RefCell<Option<NonNull<ArenaChunck<A, T, DROP>>>>,
+  next: RefCell<Option<NonNull<Arenachunk<A, T, DROP>>>>,
   start: *mut u8,
   stop: *mut u8,
   #[getset(get = "pub(crate)")]
@@ -34,7 +34,7 @@ where
   capacity: usize,
 }
 
-impl<A, T, const DROP: bool> ArenaChunck<A, T, DROP>
+impl<A, T, const DROP: bool> Arenachunk<A, T, DROP>
 where
   T: Sized,
   A: Allocator,
@@ -63,7 +63,7 @@ where
   }
 }
 
-impl<A, T, const DROP: bool> ArenaChunck<A, T, DROP>
+impl<A, T, const DROP: bool> Arenachunk<A, T, DROP>
 where
   T: Sized,
   A: Allocator,
@@ -82,7 +82,7 @@ where
   }
 }
 
-unsafe impl<A, T, const DROP: bool> Allocator for ArenaChunck<A, T, DROP>
+unsafe impl<A, T, const DROP: bool> Allocator for Arenachunk<A, T, DROP>
 where
   T: Sized,
   A: Allocator,
@@ -124,7 +124,7 @@ where
   }
 }
 
-impl<A, T, const DROP: bool> Drop for ArenaChunck<A, T, DROP>
+impl<A, T, const DROP: bool> Drop for Arenachunk<A, T, DROP>
 where
   T: Sized,
   A: Allocator,

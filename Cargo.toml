@@ -10,9 +10,6 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 getset = "0.1.6"
 
-[build-dependencies]
-cbindgen = "0.29.0"
-
 [features]
 default = [ ]
 allocator = []
