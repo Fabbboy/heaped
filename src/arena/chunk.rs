@@ -1,3 +1,5 @@
+//! Internal linked list chunk used by arena allocators.
+
 extern crate alloc;
 
 use alloc::alloc::{
@@ -32,14 +34,16 @@ where
 }
 
 #[derive(Debug)]
+/// A single chunk of memory within an arena.
 pub(crate) struct Chunk<A, T = u8, const DROP: bool = false>
 where
   T: Sized,
   A: Allocator,
 {
+  /// Inner state of the chunk.
   inner: UnsafeCell<ChunkInner<A, T, DROP>>,
 }
- 
+
 impl<A, T, const DROP: bool> Chunk<A, T, DROP>
 where
   T: Sized,

@@ -1,15 +1,30 @@
+//! Arena allocator for a single value type `T`.
+//!
+//! `TypedArena` provides fast allocation for homogenous data and
+//! ensures that destructors are run when the arena is dropped.
+
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
-use core::{mem, ptr::NonNull};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
+use core::{
+  mem,
+  ptr::NonNull,
+};
 
 use crate::arena::base::Arena as BaseArena;
 
 #[derive(Debug)]
+/// Arena allocator that stores values of type `T`.
 pub struct TypedArena<'arena, T, A: Allocator = Global>
 where
   T: Sized,
 {
+  /// Underlying arena implementation.
   base: BaseArena<'arena, T, A, true>,
 }
 
@@ -18,12 +33,14 @@ where
   T: Sized,
   A: Allocator,
 {
+  /// Create a new arena using the given allocator and chunk capacity.
   pub fn new_in(allocator: A, chunk_cap: usize) -> Self {
     Self {
       base: BaseArena::new_in(allocator, chunk_cap),
     }
   }
 
+  /// Try to allocate a value within the arena.
   pub fn try_alloc(&self, value: T) -> Result<&'arena mut T, AllocError> {
     let layout = Layout::new::<T>();
     let raw = self.base.allocate(layout)?;
@@ -34,6 +51,7 @@ where
     }
   }
 
+  /// Allocate a value, panicking if allocation fails.
   pub fn alloc(&self, value: T) -> &'arena mut T {
     self
       .try_alloc(value)
@@ -45,6 +63,7 @@ impl<'arena, T> TypedArena<'arena, T, Global>
 where
   T: Sized,
 {
+  /// Create a new arena backed by the global allocator.
   pub fn new(chunk_cap: usize) -> Self {
     Self::new_in(Global, chunk_cap)
   }

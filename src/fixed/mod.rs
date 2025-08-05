@@ -1,3 +1,5 @@
+//! Simple fixed-size bump allocator operating on a user-provided buffer.
+
 use alloc::alloc::{
   AllocError,
   Allocator,
@@ -5,9 +7,9 @@ use alloc::alloc::{
 };
 use core::{
   cell::UnsafeCell,
+  ptr,
   ptr::NonNull,
 };
-use core::ptr;
 
 struct FixedInner<'fixed> {
   mem: &'fixed mut [u8],
@@ -15,11 +17,14 @@ struct FixedInner<'fixed> {
   capacity: usize,
 }
 
+/// Allocator that hands out memory from a fixed slice.
 pub struct FixedAllocator<'fixed> {
+  /// Interior mutable state tracking the buffer.
   inner: UnsafeCell<FixedInner<'fixed>>,
 }
 
 impl<'fixed> FixedAllocator<'fixed> {
+  /// Create a new allocator from the given memory slice.
   pub fn new(mem: &'fixed mut [u8]) -> Self {
     let capacity = mem.len();
     let inner = FixedInner {
@@ -41,19 +46,23 @@ impl<'fixed> FixedAllocator<'fixed> {
     unsafe { &mut *self.inner.get() }
   }
 
+  /// Total capacity of the underlying buffer.
   pub fn capacity(&self) -> usize {
     self.get().capacity
   }
 
+  /// Amount of memory already allocated.
   pub fn used(&self) -> usize {
     self.get().used
   }
 
+  /// Remaining capacity in bytes.
   pub fn available(&self) -> usize {
     let inner = self.get();
     inner.capacity - inner.used
   }
 
+  /// Reset the allocator, forgetting all previous allocations.
   pub unsafe fn reset(&self) {
     let inner = self.get_mut();
     inner.used = 0;
