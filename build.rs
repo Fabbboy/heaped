@@ -18,6 +18,15 @@ fn main() {
         line_length: 80,
         line_endings: cbindgen::LineEndingStyle::LF,
         usize_is_size_t: true,
+        structure: cbindgen::StructConfig {
+            rename_fields: cbindgen::RenameRule::CamelCase,
+            rename_associated_constant: cbindgen::RenameRule::QualifiedScreamingSnakeCase,
+            ..Default::default()
+        },
+        function: cbindgen::FunctionConfig {
+            postfix: Some("hp_".to_string()),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
