@@ -110,7 +110,6 @@ unsafe impl<'fixed> Allocator for FixedAllocator<'fixed> {
     let ptr_addr = ptr.as_ptr() as usize;
     let mem_start = inner.mem.as_ptr() as usize;
 
-    // Check if the pointer is within our memory range
     if ptr_addr < mem_start || ptr_addr >= mem_start + inner.capacity {
       return Err(AllocError);
     }
@@ -119,12 +118,10 @@ unsafe impl<'fixed> Allocator for FixedAllocator<'fixed> {
     let old_size = old_layout.size();
     let new_size = new_layout.size();
 
-    // If shrinking, just return the same pointer with new size
     if new_size <= old_size {
       return Ok(NonNull::slice_from_raw_parts(ptr, new_size));
     }
 
-    // Check if this is the last allocation and we can extend in place
     if offset + old_size == inner.used {
       let additional_size = new_size - old_size;
       if inner.used + additional_size <= inner.capacity {
@@ -133,7 +130,6 @@ unsafe impl<'fixed> Allocator for FixedAllocator<'fixed> {
       }
     }
 
-    // Otherwise, we need to allocate new memory and copy
     let new_ptr = self.allocate(new_layout)?;
     unsafe {
       ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr().cast::<u8>(), old_size);
@@ -154,7 +150,6 @@ unsafe impl<'fixed> Allocator for FixedAllocator<'fixed> {
     let ptr_addr = ptr.as_ptr() as usize;
     let mem_start = inner.mem.as_ptr() as usize;
 
-    // Check if the pointer is within our memory range
     if ptr_addr < mem_start || ptr_addr >= mem_start + inner.capacity {
       return Err(AllocError);
     }
@@ -163,10 +158,8 @@ unsafe impl<'fixed> Allocator for FixedAllocator<'fixed> {
     let old_size = old_layout.size();
     let new_size = new_layout.size();
 
-    // Shrinking should never fail for valid pointers
     debug_assert!(new_size <= old_size);
 
-    // If this is the last allocation, we can reclaim the unused space
     if offset + old_size == inner.used {
       inner.used = offset + new_size;
     }
