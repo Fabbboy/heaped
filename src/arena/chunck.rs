@@ -15,6 +15,8 @@ where
     T: Sized,
     A: Allocator,
 {
+   start: *mut u8,
+   stop: *mut u8,
     #[getset(get = "pub(crate)")]
     storage: NonNull<MaybeUninit<T>>,
     #[getset(get = "pub(crate)")]
@@ -34,6 +36,8 @@ where
         let raw: NonNull<[u8]> = allocator.allocate(layout).map_err(|_| AllocError)?;
         let storage = unsafe { NonNull::new_unchecked(raw.as_ptr() as *mut MaybeUninit<T>) };
         Ok(Self {
+            start: raw.as_ptr(),
+            stop: unsafe { raw.as_ptr().add(raw.len()) },
             storage,
             entries: RefCell::new(0),
             capacity,
@@ -71,6 +75,8 @@ where
         let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
         remaining >= needed
     }
+
+    pub(crate) fn contains
 }
 
 unsafe impl<T, const DROP: bool, A> Allocator for ArenaChunck<T, DROP, A>
@@ -100,7 +106,15 @@ where
         let ptr_offset = ptr.as_ptr() as usize - self.storage.as_ptr() as usize;
         let ptr_index = ptr_offset / mem::size_of::<T>();
 
-        if ptr_index + needed == *entries {
+        if ptr_index + needed == *entries { 
+            if DROP {
+                for i in ptr_index..*entries {
+                    unsafe {
+                        let item_ptr = self.storage.as_ptr().add(i);
+                        item_ptr.drop_in_place();
+                    }
+                }
+            }
             *entries -= needed;
         }
     }
