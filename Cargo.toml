@@ -1,11 +1,18 @@
 [package]
 name = "heaped"
 version = "0.1.0"
-edition = "2024"
+edition = "2024" # DO NOT CHANGE
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 getset = "0.1.6"
 
+[build-dependencies]
+cbindgen = "0.29.0"
+
 [features]
 default = [ ]
-allocator = [] 
+allocator = []
