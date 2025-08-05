@@ -1,20 +1,12 @@
-use alloc::alloc::{
-  AllocError,
-  Allocator,
-  Global,
-  Layout,
-};
-use core::{
-  cell::RefCell,
-  ptr::NonNull,
-};
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use core::{cell::RefCell, ptr::NonNull};
 
-use crate::{
-  arena::chunck::ArenaChunck,
-  once::Once,
-};
+use crate::{arena::chunck::ArenaChunck, once::Once};
 
 type DroplessChunk<'arena, A> = ArenaChunck<&'arena A, u8, false>;
+type ChunkPtr<'arena, A> = NonNull<DroplessChunk<'arena, A>>;
+type MaybeChunkPtr<'arena, A> = Option<ChunkPtr<'arena, A>>;
+type Head<'arena, A> = Once<ChunkPtr<'arena, A>>;
 
 pub struct DroplessArena<'arena, A = Global>
 where
@@ -22,7 +14,7 @@ where
 {
   allocator: A,
   csize: usize,
-  head: RefCell<Once<NonNull<DroplessChunk<'arena, A>>>>,
+  head: RefCell<Head<'arena, A>>,
   layout: Layout,
 }
 
@@ -42,10 +34,7 @@ where
   }
 
   // does NOT modify the head
-  fn new_chunk(
-    &self,
-    prev: Option<NonNull<DroplessChunk<'arena, A>>>,
-  ) -> Result<NonNull<DroplessChunk<'arena, A>>, AllocError> {
+  fn new_chunk(&self, prev: MaybeChunkPtr<'arena, A>) -> Result<ChunkPtr<'arena, A>, AllocError> {
     let chunk_ptr = self.allocator.allocate(self.layout)?;
     let chunk: *mut DroplessChunk<'arena, A> = chunk_ptr.as_ptr() as *mut DroplessChunk<'arena, A>;
 
