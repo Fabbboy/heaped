@@ -56,11 +56,17 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     }
   }
 
-  pub fn insert(&mut self, value: T) -> usize {
+  pub fn try_insert(&mut self, value: T) -> Result<usize, AllocError> {
     let inner = self.inner_mut();
-    let idx = inner.alloc_slot();
+    let idx = inner.try_alloc_slot()?;
     inner.slots[idx].value = ManuallyDrop::new(value);
-    idx
+    Ok(idx)
+  }
+
+  pub fn insert(&mut self, value: T) -> usize {
+    self
+      .try_insert(value)
+      .expect("Failed to insert into SlabAllocator")
   }
 
   pub fn remove(&mut self, index: usize) -> Option<T> {
@@ -114,17 +120,18 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
 }
 
 impl<T, A: Allocator> SlabInner<T, A> {
-  fn alloc_slot(&mut self) -> usize {
+  fn try_alloc_slot(&mut self) -> Result<usize, AllocError> {
     match self.free {
       EMPTY => {
+        self.slots.try_reserve(1).map_err(|_| AllocError)?;
         self.slots.push(Slot { next: EMPTY });
         self.len += 1;
-        self.slots.len() - 1
+        Ok(self.slots.len() - 1)
       }
       idx => {
         self.free = unsafe { self.slots[idx].next };
         self.len += 1;
-        idx
+        Ok(idx)
       }
     }
   }
@@ -152,7 +159,7 @@ unsafe impl<T, A: Allocator> Allocator for SlabAllocator<T, A> {
       return Err(AllocError);
     }
     let inner = unsafe { &mut *self.inner.get() };
-    let idx = inner.alloc_slot();
+    let idx = inner.try_alloc_slot()?;
     let ptr = inner.slots.as_mut_ptr();
     let ptr = unsafe { ptr.add(idx) as *mut u8 };
     let slice = ptr::slice_from_raw_parts_mut(ptr, layout.size());

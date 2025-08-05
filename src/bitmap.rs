@@ -35,7 +35,9 @@ where
     let fields = size / 8;
 
     let layout = Layout::array::<u8>(fields).map_err(|_| BitmapError::InvalidSize)?;
-    let ptr = allocator.allocate_zeroed(layout).map_err(|_| BitmapError::AllocError)?;
+    let ptr = allocator
+      .allocate_zeroed(layout)
+      .map_err(|_| BitmapError::AllocError)?;
     let map = unsafe { core::slice::from_raw_parts_mut(ptr.as_ptr() as *mut u8, fields) };
     Ok(Bitmap {
       allocator,
@@ -60,7 +62,7 @@ impl<'map, A> Bitmap<'map, A>
 where
   A: Allocator,
 {
-  pub fn set(&mut self, index: usize) -> Result<(), BitmapError> {
+  pub fn try_set(&mut self, index: usize) -> Result<(), BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
     }
@@ -70,7 +72,11 @@ where
     Ok(())
   }
 
-  pub fn get(&self, index: usize) -> Result<bool, BitmapError> {
+  pub fn set(&mut self, index: usize) {
+    self.try_set(index).expect("Bitmap index out of bounds");
+  }
+
+  pub fn try_get(&self, index: usize) -> Result<bool, BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
     }
@@ -79,7 +85,11 @@ where
     Ok((self.map[byte_index] & (1 << bit_index)) != 0)
   }
 
-  pub fn clear(&mut self, index: usize) -> Result<(), BitmapError> {
+  pub fn get(&self, index: usize) -> bool {
+    self.try_get(index).expect("Bitmap index out of bounds")
+  }
+
+  pub fn try_clear(&mut self, index: usize) -> Result<(), BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
     }
@@ -89,7 +99,11 @@ where
     Ok(())
   }
 
-  pub fn resize(&mut self, new_size: usize) -> Result<(), BitmapError> {
+  pub fn clear(&mut self, index: usize) {
+    self.try_clear(index).expect("Bitmap index out of bounds");
+  }
+
+  pub fn try_resize(&mut self, new_size: usize) -> Result<(), BitmapError> {
     if new_size % 8 != 0 {
       return Err(BitmapError::InvalidSize);
     }
@@ -100,7 +114,8 @@ where
       let new_ptr = unsafe {
         self
           .allocator
-          .grow_zeroed(old_ptr, self.layout, new_layout).map_err(|_| BitmapError::AllocError)?
+          .grow_zeroed(old_ptr, self.layout, new_layout)
+          .map_err(|_| BitmapError::AllocError)?
       };
       self.map =
         unsafe { core::slice::from_raw_parts_mut(new_ptr.as_ptr() as *mut u8, new_fields) };
@@ -112,6 +127,10 @@ where
     }
     self.fields = new_fields;
     Ok(())
+  }
+
+  pub fn resize(&mut self, new_size: usize) {
+    self.try_resize(new_size).expect("Failed to resize Bitmap");
   }
 }
 
@@ -138,17 +157,17 @@ mod tests {
   #[test]
   fn test_bitmap() {
     let mut bitmap = Bitmap::new(64);
-    assert!(bitmap.set(10).is_ok());
-    assert!(bitmap.get(10).unwrap());
-    assert!(bitmap.clear(10).is_ok());
-    assert!(!bitmap.get(10).unwrap());
+    assert!(bitmap.try_set(10).is_ok());
+    assert!(bitmap.try_get(10).unwrap());
+    assert!(bitmap.try_clear(10).is_ok());
+    assert!(!bitmap.try_get(10).unwrap());
   }
 
   #[test]
   fn test_resize() {
     let mut bitmap = Bitmap::new(64);
-    assert!(bitmap.set(10).is_ok());
-    assert!(bitmap.resize(128).is_ok());
-    assert!(bitmap.get(10).unwrap());
+    assert!(bitmap.try_set(10).is_ok());
+    assert!(bitmap.try_resize(128).is_ok());
+    assert!(bitmap.try_get(10).unwrap());
   }
 }

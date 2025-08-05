@@ -52,8 +52,8 @@ fn typed_arena_drop() {
   let arena = TypedArena::new(4);
   let counter = Cell::new(0);
   {
-    let _ = arena.alloc(DropCounter(&counter)).unwrap();
-    let _ = arena.alloc(DropCounter(&counter)).unwrap();
+    let _ = arena.try_alloc(DropCounter(&counter)).unwrap();
+    let _ = arena.try_alloc(DropCounter(&counter)).unwrap();
     assert_eq!(counter.get(), 0);
   }
   drop(arena);
@@ -63,7 +63,7 @@ fn typed_arena_drop() {
 #[test]
 fn typed_arena_multiple_chunks() {
   let arena = TypedArena::new(1);
-  let a = arena.alloc(1u32).unwrap();
-  let b = arena.alloc(2u32).unwrap();
+  let a = arena.try_alloc(1u32).unwrap();
+  let b = arena.try_alloc(2u32).unwrap();
   assert_eq!((*a, *b), (1, 2));
 }

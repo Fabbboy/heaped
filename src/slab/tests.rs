@@ -7,17 +7,17 @@ use alloc::alloc::{
 #[test]
 fn insert_and_get() {
   let mut slab = SlabAllocator::new();
-  let idx = slab.insert(10);
+  let idx = slab.try_insert(10).unwrap();
   assert_eq!(slab.get(idx), Some(&10));
 }
 
 #[test]
 fn remove_and_reuse() {
   let mut slab = SlabAllocator::new();
-  let a = slab.insert(1);
-  let b = slab.insert(2);
+  let a = slab.try_insert(1).unwrap();
+  let b = slab.try_insert(2).unwrap();
   assert_eq!(slab.remove(a), Some(1));
-  let c = slab.insert(3);
+  let c = slab.try_insert(3).unwrap();
   assert_eq!(c, a);
   assert_eq!(slab.get(b), Some(&2));
   assert_eq!(slab.get(c), Some(&3));

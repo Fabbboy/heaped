@@ -10,13 +10,19 @@ impl<T> Once<T> {
     Once::Uninit
   }
 
-  pub fn init(&mut self, value: T) -> Result<(), T> {
+  pub fn try_init(&mut self, value: T) -> Result<(), T> {
     match self {
       Once::Uninit => {
         *self = Once::Init(value);
         Ok(())
       }
       Once::Init(_) => Err(value),
+    }
+  }
+
+  pub fn init(&mut self, value: T) {
+    if self.try_init(value).is_err() {
+      panic!("Once instance has already been initialized");
     }
   }
 

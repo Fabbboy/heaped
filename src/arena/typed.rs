@@ -86,7 +86,7 @@ where
     Ok(non_null)
   }
 
-  pub fn alloc(&self, value: T) -> Result<&'arena mut T, AllocError> {
+  pub fn try_alloc(&self, value: T) -> Result<&'arena mut T, AllocError> {
     let layout = Layout::new::<T>();
     let raw = self.allocate(layout)?;
     let ptr = raw.as_ptr() as *mut T;
@@ -95,6 +95,12 @@ where
       ptr.write(value);
       Ok(&mut *ptr)
     }
+  }
+
+  pub fn alloc(&self, value: T) -> &'arena mut T {
+    self
+      .try_alloc(value)
+      .expect("Failed to allocate in TypedArena")
   }
 }
 
