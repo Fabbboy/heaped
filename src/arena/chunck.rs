@@ -106,7 +106,8 @@ where
                 for i in ptr_index..*entries {
                     unsafe {
                         let item_ptr = self.storage.as_ptr().add(i);
-                        item_ptr.drop_in_place();
+                        // SAFETY: item_ptr points to an initialized entry
+                        (*item_ptr).assume_init_drop();
                     }
                 }
             }
@@ -126,7 +127,8 @@ where
             for i in 0..entries_count {
                 unsafe {
                     let ptr = self.storage.as_ptr().add(i);
-                    ptr.drop_in_place();
+                    // SAFETY: ptr points to an initialized entry
+                    (*ptr).assume_init_drop();
                 }
             }
         }
