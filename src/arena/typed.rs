@@ -1,13 +1,24 @@
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
   mem,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
-use crate::{arena::chunk::Chunk as RawChunk, once::Once};
+use crate::{
+  arena::chunk::Chunk as RawChunk,
+  once::Once,
+};
 
 type Chunk<'arena, T, A> = RawChunk<&'arena A, T, true>;
 
@@ -33,7 +44,7 @@ where
   T: Sized,
   A: Allocator,
 {
-  fn inner_mut(&self) -> &mut TypedArenaInner<'arena, T, A> {
+  unsafe fn inner_mut(&self) -> &mut TypedArenaInner<'arena, T, A> {
     // SAFETY: callers ensure exclusive access
     unsafe { &mut *self.inner.get() }
   }
@@ -102,7 +113,7 @@ where
   A: Allocator,
 {
   fn drop(&mut self) {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     if let Some(chunk) = inner.head.get() {
       // SAFETY: chunk is the head of a valid list
       unsafe {
@@ -129,7 +140,7 @@ where
     assert_eq!(layout.size(), mem::size_of::<T>());
     assert_eq!(layout.align(), mem::align_of::<T>());
 
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     let mut current = match inner.head.get() {
       Some(h) => *h,
       None => {
@@ -156,16 +167,18 @@ where
   }
 
   unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     if let Some(mut current) = inner.head.get().copied() {
       loop {
-        if current.as_ref().contains(ptr.as_ptr()) {
-          current.as_ref().deallocate(ptr, layout);
-          break;
-        }
-        match current.as_ref().next() {
-          Some(next) => current = next,
-          None => break,
+        unsafe {
+          if current.as_ref().contains(ptr.as_ptr()) {
+            current.as_ref().deallocate(ptr, layout);
+            break;
+          }
+          match current.as_ref().next() {
+            Some(next) => current = next,
+            None => break,
+          }
         }
       }
     }

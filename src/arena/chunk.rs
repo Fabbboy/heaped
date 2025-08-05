@@ -1,11 +1,18 @@
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
   mem,
   mem::MaybeUninit,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
 struct ChunkInner<A, T, const DROP: bool>
@@ -41,7 +48,7 @@ where
     unsafe { &*self.inner.get() }
   }
 
-  fn inner_mut(&self) -> &mut ChunkInner<A, T, DROP> {
+  unsafe fn inner_mut(&self) -> &mut ChunkInner<A, T, DROP> {
     // SAFETY: callers ensure exclusive access
     unsafe { &mut *self.inner.get() }
   }
@@ -74,7 +81,7 @@ where
   pub(crate) fn has_space(&self, layout: Layout) -> bool {
     let inner = self.inner();
     let remaining = inner.capacity - inner.len;
-    let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+    let needed = layout.size().div_ceil(mem::size_of::<T>());
     remaining >= needed
   }
 
@@ -91,11 +98,11 @@ where
   }
 
   pub(crate) fn set_prev(&self, prev: Option<NonNull<Self>>) {
-    self.inner_mut().prev = prev;
+    unsafe { self.inner_mut().prev = prev };
   }
 
   pub(crate) fn set_next(&self, next: Option<NonNull<Self>>) {
-    self.inner_mut().next = next;
+    unsafe { self.inner_mut().next = next };
   }
 }
 
@@ -109,8 +116,8 @@ where
       return Err(AllocError);
     }
 
-    let inner = self.inner_mut();
-    let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+    let inner = unsafe { self.inner_mut() };
+    let needed = layout.size().div_ceil(mem::size_of::<T>());
     let start = inner.len;
     inner.len += needed;
 
@@ -121,8 +128,8 @@ where
   }
 
   unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-    let inner = self.inner_mut();
-    let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+    let inner = unsafe { self.inner_mut() };
+    let needed = layout.size().div_ceil(mem::size_of::<T>());
 
     let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
     let ptr_index = ptr_offset / mem::size_of::<T>();
@@ -147,9 +154,9 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let inner = self.inner_mut();
-    let old_needed = (old_layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
-    let new_needed = (new_layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+    let inner = unsafe { self.inner_mut() };
+    let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
+    let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
     let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
     let ptr_index = ptr_offset / mem::size_of::<T>();
 
@@ -160,12 +167,14 @@ where
         let raw = ptr.as_ptr();
         // SAFETY: raw is valid for new_layout.size() bytes
         let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
-        return Ok(NonNull::new_unchecked(slice));
+        return Ok(unsafe { NonNull::new_unchecked(slice) });
       }
     }
 
     let new_ptr = self.allocate(new_layout)?;
-    ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, old_layout.size());
+    unsafe {
+      ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, old_layout.size());
+    }
     Ok(new_ptr)
   }
 
@@ -175,9 +184,9 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let inner = self.inner_mut();
-    let old_needed = (old_layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
-    let new_needed = (new_layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+    let inner = unsafe { self.inner_mut() };
+    let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
+    let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
     let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
     let ptr_index = ptr_offset / mem::size_of::<T>();
 
@@ -195,11 +204,13 @@ where
       let raw = ptr.as_ptr();
       // SAFETY: raw is valid for new_layout.size() bytes
       let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
-      return Ok(NonNull::new_unchecked(slice));
+      return Ok(unsafe { NonNull::new_unchecked(slice) });
     }
 
     let new_ptr = self.allocate(new_layout)?;
-    ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, new_layout.size());
+    unsafe {
+      ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, new_layout.size());
+    }
     Ok(new_ptr)
   }
 }
@@ -210,7 +221,7 @@ where
   A: Allocator,
 {
   fn drop(&mut self) {
-    let inner = self.inner_mut();
+    let inner = unsafe { self.inner_mut() };
     if DROP {
       for i in 0..inner.len {
         // SAFETY: ptr points to an initialized entry
