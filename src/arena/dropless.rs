@@ -1,82 +1,76 @@
-use alloc::alloc::{
-  AllocError,
-  Allocator,
-  Global,
-  Layout,
-};
+extern crate alloc;
+
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
 use core::{
-  cell::RefCell,
-  ptr::NonNull,
+  cell::UnsafeCell,
+  ptr::{self, NonNull},
 };
 
-use crate::{
-  arena::chunk::Arenachunk,
-  once::Once,
-};
+use crate::{arena::chunk::Chunk as RawChunk, once::Once};
 
-type DroplessChunk<'arena, A> = Arenachunk<&'arena A, u8, false>;
+type Chunk<'arena, A> = RawChunk<&'arena A, u8, false>;
 
-pub struct DroplessArena<'arena, A = Global>
-where
-  A: Allocator,
-{
+struct DroplessArenaInner<'arena, A: Allocator> {
   allocator: A,
-  csize: usize,
-  head: RefCell<Once<NonNull<DroplessChunk<'arena, A>>>>,
+  chunk_cap: usize,
+  head: Once<NonNull<Chunk<'arena, A>>>,
   layout: Layout,
+}
+
+pub struct DroplessArena<'arena, A: Allocator = Global> {
+  inner: UnsafeCell<DroplessArenaInner<'arena, A>>,
 }
 
 impl<'arena, A> DroplessArena<'arena, A>
 where
   A: Allocator,
 {
-  pub fn new_in(allocator: A, csize: usize) -> Self {
-    let layout = Layout::new::<DroplessChunk<'arena, A>>();
+  fn inner_mut(&self) -> &mut DroplessArenaInner<'arena, A> {
+    // SAFETY: callers ensure exclusive access
+    unsafe { &mut *self.inner.get() }
+  }
 
+  pub fn new_in(allocator: A, chunk_cap: usize) -> Self {
+    let layout = Layout::new::<Chunk<'arena, A>>();
     Self {
-      csize,
-      head: RefCell::new(Once::Uninit),
-      allocator,
-      layout,
+      inner: UnsafeCell::new(DroplessArenaInner {
+        allocator,
+        chunk_cap,
+        head: Once::Uninit,
+        layout,
+      }),
     }
   }
 
-  // does NOT modify the head
-  fn new_chunk(
+  fn alloc_chunk(
     &self,
-    prev: Option<NonNull<DroplessChunk<'arena, A>>>,
-  ) -> Result<NonNull<DroplessChunk<'arena, A>>, AllocError> {
-    let chunk_ptr = self.allocator.allocate(self.layout)?;
-    let chunk: *mut DroplessChunk<'arena, A> = chunk_ptr.as_ptr() as *mut DroplessChunk<'arena, A>;
-
-    let allocator: &'arena A = unsafe { &*(&self.allocator as *const A) };
-    let non_null_ptr = unsafe {
-      chunk.write(DroplessChunk::new(allocator, self.csize));
+    inner: &mut DroplessArenaInner<'arena, A>,
+    prev: Option<NonNull<Chunk<'arena, A>>>,
+  ) -> Result<NonNull<Chunk<'arena, A>>, AllocError> {
+    let chunk_ptr = inner.allocator.allocate(inner.layout)?;
+    let chunk = chunk_ptr.as_ptr() as *mut Chunk<'arena, A>;
+    let allocator: &'arena A = unsafe { &*(&inner.allocator as *const A) };
+    // SAFETY: chunk points to memory large enough for Chunk
+    let non_null = unsafe {
+      chunk.write(RawChunk::new(allocator, inner.chunk_cap));
       NonNull::new_unchecked(chunk)
     };
 
     if let Some(prev_chunk) = prev {
+      // SAFETY: prev_chunk and non_null are valid chunks
       unsafe {
-        prev_chunk
-          .as_ref()
-          .next()
-          .borrow_mut()
-          .replace(non_null_ptr);
-        non_null_ptr
-          .as_ref()
-          .prev()
-          .borrow_mut()
-          .replace(prev_chunk);
+        prev_chunk.as_ref().set_next(Some(non_null));
+        non_null.as_ref().set_prev(Some(prev_chunk));
       }
     }
 
-    Ok(non_null_ptr)
+    Ok(non_null)
   }
 }
 
 impl<'arena> DroplessArena<'arena, Global> {
-  pub fn new(csize: usize) -> Self {
-    Self::new_in(Global, csize)
+  pub fn new(chunk_cap: usize) -> Self {
+    Self::new_in(Global, chunk_cap)
   }
 }
 
@@ -85,16 +79,18 @@ where
   A: Allocator,
 {
   fn drop(&mut self) {
-    let head = self.head.borrow_mut();
-    if let Some(chunk) = head.get() {
+    let inner = self.inner_mut();
+    if let Some(chunk) = inner.head.get() {
+      // SAFETY: chunk is the head of a valid list
       unsafe {
         let mut current = chunk.as_ptr();
         while !current.is_null() {
-          let next = (*current).next().borrow_mut().take();
-          self
+          let next = (&*current).next();
+          ptr::drop_in_place(current);
+          inner
             .allocator
-            .deallocate(NonNull::new_unchecked(current as *mut u8), self.layout);
-          current = next.map_or(core::ptr::null_mut(), |n| n.as_ptr());
+            .deallocate(NonNull::new_unchecked(current as *mut u8), inner.layout);
+          current = next.map_or(ptr::null_mut(), |n| n.as_ptr());
         }
       }
     }
@@ -106,26 +102,26 @@ where
   A: Allocator,
 {
   fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-    let mut head = self.head.borrow_mut();
-    let mut current = match head.get() {
+    let inner = self.inner_mut();
+    let mut current = match inner.head.get() {
       Some(h) => *h,
       None => {
-        let new_head = self.new_chunk(None)?;
-        let _ = head.init(new_head);
+        let new_head = self.alloc_chunk(inner, None)?;
+        let _ = inner.head.init(new_head);
         new_head
       }
     };
-    drop(head);
 
     loop {
+      // SAFETY: current points to a valid chunk
       unsafe {
         if current.as_ref().has_space(layout) {
           return current.as_ref().allocate(layout);
         }
-        if let Some(next) = *current.as_ref().next().borrow() {
+        if let Some(next) = current.as_ref().next() {
           current = next;
         } else {
-          let new = self.new_chunk(Some(current))?;
+          let new = self.alloc_chunk(inner, Some(current))?;
           return new.as_ref().allocate(layout);
         }
       }
@@ -133,18 +129,97 @@ where
   }
 
   unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-    if let Some(mut current) = self.head.borrow().get().copied() {
+    let inner = self.inner_mut();
+    if let Some(mut current) = inner.head.get().copied() {
       loop {
-        if unsafe { current.as_ref().contains(ptr.as_ptr()) } {
-          unsafe { current.as_ref().deallocate(ptr, layout) };
+        if current.as_ref().contains(ptr.as_ptr()) {
+          current.as_ref().deallocate(ptr, layout);
           break;
         }
-        match unsafe { *current.as_ref().next().borrow() } {
+        match current.as_ref().next() {
           Some(next) => current = next,
           None => break,
         }
       }
     }
+  }
+
+  unsafe fn grow(
+    &self,
+    ptr: NonNull<u8>,
+    old_layout: Layout,
+    new_layout: Layout,
+  ) -> Result<NonNull<[u8]>, AllocError> {
+    let head = self.inner_mut().head.get().copied();
+    if let Some(mut current) = head {
+      loop {
+        if current.as_ref().contains(ptr.as_ptr()) {
+          match current.as_ref().grow(ptr, old_layout, new_layout) {
+            Ok(res) => return Ok(res),
+            Err(_) => {
+              let new_block = self.allocate(new_layout)?;
+              ptr::copy_nonoverlapping(
+                ptr.as_ptr(),
+                new_block.as_ptr() as *mut u8,
+                old_layout.size(),
+              );
+              current.as_ref().deallocate(ptr, old_layout);
+              return Ok(new_block);
+            }
+          }
+        }
+        match current.as_ref().next() {
+          Some(next) => current = next,
+          None => break,
+        }
+      }
+    }
+    let new_block = self.allocate(new_layout)?;
+    ptr::copy_nonoverlapping(
+      ptr.as_ptr(),
+      new_block.as_ptr() as *mut u8,
+      old_layout.size(),
+    );
+    Ok(new_block)
+  }
+
+  unsafe fn shrink(
+    &self,
+    ptr: NonNull<u8>,
+    old_layout: Layout,
+    new_layout: Layout,
+  ) -> Result<NonNull<[u8]>, AllocError> {
+    let head = self.inner_mut().head.get().copied();
+    if let Some(mut current) = head {
+      loop {
+        if current.as_ref().contains(ptr.as_ptr()) {
+          match current.as_ref().shrink(ptr, old_layout, new_layout) {
+            Ok(res) => return Ok(res),
+            Err(_) => {
+              let new_block = self.allocate(new_layout)?;
+              ptr::copy_nonoverlapping(
+                ptr.as_ptr(),
+                new_block.as_ptr() as *mut u8,
+                new_layout.size(),
+              );
+              current.as_ref().deallocate(ptr, old_layout);
+              return Ok(new_block);
+            }
+          }
+        }
+        match current.as_ref().next() {
+          Some(next) => current = next,
+          None => break,
+        }
+      }
+    }
+    let new_block = self.allocate(new_layout)?;
+    ptr::copy_nonoverlapping(
+      ptr.as_ptr(),
+      new_block.as_ptr() as *mut u8,
+      new_layout.size(),
+    );
+    Ok(new_block)
   }
 }
 
