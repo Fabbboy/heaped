@@ -79,6 +79,20 @@ where
 
     Ok(non_null)
   }
+
+  pub fn try_alloc_str(&self, value: &str) -> Result<&'arena mut str, AllocError> {
+    let layout = Layout::array::<u8>(value.len()).map_err(|_| AllocError)?;
+    let mem = self.allocate_zeroed(layout)?;
+    let slice = unsafe { core::slice::from_raw_parts_mut(mem.as_ptr() as *mut u8, value.len()) };
+    slice.copy_from_slice(value.as_bytes());
+    Ok(unsafe { core::str::from_utf8_unchecked_mut(slice) })
+  }
+
+  pub fn alloc_str(&self, value: &str) -> &'arena mut str {
+    self
+      .try_alloc_str(value)
+      .expect("Failed to allocate string")
+  }
 }
 
 impl<'arena> DroplessArena<'arena, Global> {
