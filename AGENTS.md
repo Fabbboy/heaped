@@ -1,0 +1,10 @@
+## Rules
+- You are only allowed to use `core` and `alloc` ensure imports are adjusted.
+- External crates like `getset` are allowed BUT they have to work on no_std too. 
+- Try to make stuff that doesnt need to be exposed to the user as private as possible.
+- Do not use types that rely on the global allocator. Some no_std environments do not have or never initialize the global allocator. Therby using `Vec` or `Box` might not work unless you explicitly provide it with an allocator.
+- Error handling should be possible if the user wants it else `expect` is allowed to be used.
+- Be sure to use `assert` in debug builds to give user more insight if they are doing something wrong.
+- Unsafe is allowed and probably needed but the final user facing api (except trait implementations) should be as safe as possible.
+- Do not comment unless its a `SAFETY` comment.
+- Ensure everything manually allocated is free eventually.
