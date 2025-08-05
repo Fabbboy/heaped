@@ -1,10 +1,12 @@
 use std::alloc::AllocError;
+use std::cell::RefCell;
 use std::{
     alloc::{Allocator, Global, Layout},
     mem::MaybeUninit,
     ptr::NonNull,
 };
 
+use core::mem;
 use getset::Getters;
 
 #[derive(Debug, Getters)]
@@ -16,7 +18,7 @@ where
     #[getset(get = "pub(crate)")]
     storage: NonNull<MaybeUninit<T>>,
     #[getset(get = "pub(crate)")]
-    entries: usize,
+    entries: RefCell<usize>,
     #[getset(get = "pub(crate)")]
     capacity: usize,
     allocator: A,
@@ -33,7 +35,7 @@ where
         let storage = unsafe { NonNull::new_unchecked(raw.as_ptr() as *mut MaybeUninit<T>) };
         Ok(Self {
             storage,
-            entries: 0,
+            entries: RefCell::new(0),
             capacity,
             allocator,
         })
@@ -65,9 +67,42 @@ where
     A: Allocator,
 {
     pub(crate) fn has_space(&self, layout: Layout) -> bool {
-        let remaining = self.capacity - self.entries;
-        let needed = (layout.size() + std::mem::size_of::<T>() - 1) / std::mem::size_of::<T>();
+        let remaining = self.capacity - *self.entries.borrow();
+        let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
         remaining >= needed
+    }
+}
+
+unsafe impl<T, const DROP: bool, A> Allocator for ArenaChunck<T, DROP, A>
+where
+    T: Sized,
+    A: Allocator,
+{
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        if !self.has_space(layout) {
+            return Err(AllocError);
+        }
+
+        let mut entries = self.entries.borrow_mut();
+        let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+        let start = *entries;
+        *entries += needed;
+
+        let ptr = unsafe { self.storage.as_ptr().add(start) as *mut u8 };
+        let byte_count = needed * mem::size_of::<T>();
+        Ok(unsafe { NonNull::new_unchecked(std::slice::from_raw_parts_mut(ptr, byte_count)) })
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let mut entries = self.entries.borrow_mut();
+        let needed = (layout.size() + mem::size_of::<T>() - 1) / mem::size_of::<T>();
+
+        let ptr_offset = ptr.as_ptr() as usize - self.storage.as_ptr() as usize;
+        let ptr_index = ptr_offset / mem::size_of::<T>();
+
+        if ptr_index + needed == *entries {
+            *entries -= needed;
+        }
     }
 }
 
@@ -78,7 +113,8 @@ where
 {
     fn drop(&mut self) {
         if DROP {
-            for i in 0..self.entries {
+            let entries_count = *self.entries.borrow();
+            for i in 0..entries_count {
                 unsafe {
                     let ptr = self.storage.as_ptr().add(i);
                     ptr.drop_in_place();
