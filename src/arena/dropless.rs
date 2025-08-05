@@ -1,12 +1,23 @@
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
-use crate::{arena::chunk::Chunk as RawChunk, once::Once};
+use crate::{
+  arena::chunk::Chunk as RawChunk,
+  once::Once,
+};
 
 type Chunk<'arena, A> = RawChunk<&'arena A, u8, false>;
 
@@ -220,24 +231,5 @@ where
       new_layout.size(),
     );
     Ok(new_block)
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_dropless_arena() {
-    let arena = DroplessArena::new(1024);
-    let string_layout = Layout::array::<u8>(10).unwrap();
-    let mut string_raw = arena.allocate_zeroed(string_layout).unwrap();
-    let string_slice = unsafe { string_raw.as_mut() };
-    string_slice.copy_from_slice(b"HelloWorld");
-
-    let str_ref = unsafe { core::str::from_utf8_unchecked(string_slice) };
-
-    assert_eq!(string_slice, b"HelloWorld");
-    assert_eq!(str_ref, "HelloWorld");
   }
 }

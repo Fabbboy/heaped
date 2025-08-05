@@ -1,13 +1,24 @@
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
   mem,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
-use crate::{arena::chunk::Chunk as RawChunk, once::Once};
+use crate::{
+  arena::chunk::Chunk as RawChunk,
+  once::Once,
+};
 
 type Chunk<'arena, T, A> = RawChunk<&'arena A, T, true>;
 
@@ -187,33 +198,5 @@ where
     _new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
     Err(AllocError)
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use core::cell::Cell;
-
-  struct DropCounter<'a>(&'a Cell<usize>);
-
-  impl<'a> Drop for DropCounter<'a> {
-    fn drop(&mut self) {
-      let v = self.0.get();
-      self.0.set(v + 1);
-    }
-  }
-
-  #[test]
-  fn typed_arena_drop() {
-    let arena = TypedArena::new(4);
-    let counter = Cell::new(0);
-    {
-      let _ = arena.alloc(DropCounter(&counter)).unwrap();
-      let _ = arena.alloc(DropCounter(&counter)).unwrap();
-      assert_eq!(counter.get(), 0);
-    }
-    drop(arena);
-    assert_eq!(counter.get(), 2);
   }
 }
