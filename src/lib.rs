@@ -1,4 +1,7 @@
+#![no_std]
 #![feature(allocator_api)]
 
-pub mod arena; 
+extern crate alloc;
+
+pub mod arena;
 pub mod once;

@@ -1,7 +1,5 @@
-extern crate alloc;
-
 use alloc::alloc::{AllocError, Allocator, Global, Layout};
-use core::{cell::RefCell, ptr::NonNull};
+use core::{cell::RefCell, ptr::{self, NonNull}};
 
 use crate::{arena::chunck::ArenaChunck, once::Once};
 
@@ -85,7 +83,7 @@ where
                     let next = (*current).next().borrow_mut().take();
                     self.allocator
                         .deallocate(NonNull::new_unchecked(current as *mut u8), self.layout);
-                    current = next.map_or(std::ptr::null_mut(), |n| n.as_ptr());
+                    current = next.map_or(ptr::null_mut(), |n| n.as_ptr());
                 }
             }
         }
@@ -155,6 +153,5 @@ mod tests {
 
         assert_eq!(string_slice, b"HelloWorld");
         assert_eq!(str_ref, "HelloWorld");
-        println!("String from arena: {}", str_ref);
     }
 }

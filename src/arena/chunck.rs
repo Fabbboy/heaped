@@ -1,12 +1,10 @@
-use std::alloc::AllocError;
-use std::cell::RefCell;
-use std::{
-    alloc::{Allocator, Global, Layout},
-    mem::MaybeUninit,
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use core::{
+    cell::RefCell,
+    mem::{self, MaybeUninit},
     ptr::NonNull,
+    slice,
 };
-
-use core::mem;
 use getset::Getters;
 
 #[derive(Debug, Getters)]
@@ -95,7 +93,7 @@ where
 
         let ptr = unsafe { self.storage.as_ptr().add(start) as *mut u8 };
         let byte_count = needed * mem::size_of::<T>();
-        Ok(unsafe { NonNull::new_unchecked(std::slice::from_raw_parts_mut(ptr, byte_count)) })
+        Ok(unsafe { NonNull::new_unchecked(slice::from_raw_parts_mut(ptr, byte_count)) })
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
