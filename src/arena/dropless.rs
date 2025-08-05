@@ -21,6 +21,7 @@ use crate::{
 
 type Chunk<'arena, A> = RawChunk<&'arena A, u8, false>;
 
+#[derive(Debug)]
 struct DroplessArenaInner<'arena, A: Allocator> {
   allocator: A,
   chunk_cap: usize,
@@ -28,6 +29,7 @@ struct DroplessArenaInner<'arena, A: Allocator> {
   layout: Layout,
 }
 
+#[derive(Debug)]
 pub struct DroplessArena<'arena, A: Allocator = Global> {
   inner: UnsafeCell<DroplessArenaInner<'arena, A>>,
 }

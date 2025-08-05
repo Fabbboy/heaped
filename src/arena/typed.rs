@@ -22,6 +22,7 @@ use crate::{
 
 type Chunk<'arena, T, A> = RawChunk<&'arena A, T, true>;
 
+#[derive(Debug)]
 struct TypedArenaInner<'arena, T, A: Allocator>
 where
   T: Sized,
@@ -32,6 +33,7 @@ where
   layout: Layout,
 }
 
+#[derive(Debug)]
 pub struct TypedArena<'arena, T, A: Allocator = Global>
 where
   T: Sized,

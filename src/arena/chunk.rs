@@ -15,6 +15,7 @@ use core::{
   },
 };
 
+#[derive(Debug)]
 struct ChunkInner<A, T, const DROP: bool>
 where
   T: Sized,
@@ -30,6 +31,7 @@ where
   capacity: usize,
 }
 
+#[derive(Debug)]
 pub(crate) struct Chunk<A, T = u8, const DROP: bool = false>
 where
   T: Sized,
@@ -37,7 +39,7 @@ where
 {
   inner: UnsafeCell<ChunkInner<A, T, DROP>>,
 }
-
+ 
 impl<A, T, const DROP: bool> Chunk<A, T, DROP>
 where
   T: Sized,

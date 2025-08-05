@@ -13,6 +13,7 @@ pub enum BitmapError {
   InvalidSize,
 }
 
+#[derive(Debug)]
 pub struct Bitmap<'map, A = Global>
 where
   A: Allocator,

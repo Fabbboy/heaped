@@ -1,13 +1,10 @@
 [package]
 name = "heaped"
 version = "0.1.0"
-edition = "2024" # DO NOT CHANGE 
-
-[lib]
-crate-type = ["rlib", "cdylib", "staticlib"]
+edition = "2024"  # DO NOT CHANGE 
 
 [dependencies]
 
 [features]
-default = [ ]
+default = []
 allocator = []
