@@ -1,20 +1,34 @@
+//! Internal arena allocator backing [`TypedArena`] and [`DroplessArena`].
+
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
-use crate::{arena::chunk::Chunk as RawChunk, once::Once};
+use crate::{
+  arena::chunk::Chunk as RawChunk,
+  once::Once,
+};
 
 type Chunk<'arena, T, A, const DROP: bool> = RawChunk<&'arena A, T, DROP>;
 
 #[derive(Debug)]
+/// Core arena structure used by public arena types.
 pub(crate) struct Arena<'arena, T, A: Allocator, const DROP: bool>
 where
   T: Sized,
 {
+  /// Interior mutable state of the arena.
   inner: UnsafeCell<ArenaInner<'arena, T, A, DROP>>,
 }
 

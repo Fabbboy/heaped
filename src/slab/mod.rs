@@ -1,3 +1,5 @@
+//! Slab allocator providing constant-time allocation of objects.
+
 use alloc::{
   alloc::{
     AllocError,
@@ -29,11 +31,14 @@ struct SlabInner<T, A: Allocator> {
   len: usize,
 }
 
+/// Allocator that stores values in a slab for reuse.
 pub struct SlabAllocator<T, A: Allocator = Global> {
+  /// Interior mutable state of the slab.
   inner: UnsafeCell<SlabInner<T, A>>,
 }
 
 impl<T> SlabAllocator<T, Global> {
+  /// Create a new slab allocator using the global allocator.
   pub fn new() -> Self {
     Self::new_in(Global)
   }
@@ -46,6 +51,7 @@ impl<T> Default for SlabAllocator<T, Global> {
 }
 
 impl<T, A: Allocator> SlabAllocator<T, A> {
+  /// Create a new slab allocator using the provided allocator.
   pub fn new_in(alloc: A) -> Self {
     Self {
       inner: UnsafeCell::new(SlabInner {
@@ -56,6 +62,7 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     }
   }
 
+  /// Try to insert a value, returning its index on success.
   pub fn try_insert(&mut self, value: T) -> Result<usize, AllocError> {
     let inner = self.inner_mut();
     let idx = inner.try_alloc_slot()?;
@@ -63,12 +70,14 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     Ok(idx)
   }
 
+  /// Insert a value, panicking on allocation failure.
   pub fn insert(&mut self, value: T) -> usize {
     self
       .try_insert(value)
       .expect("Failed to insert into SlabAllocator")
   }
 
+  /// Remove a value at the given index, returning it if present.
   pub fn remove(&mut self, index: usize) -> Option<T> {
     let inner = self.inner_mut();
     if index >= inner.slots.len() || inner.is_free(index) {
@@ -80,6 +89,7 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     Some(value)
   }
 
+  /// Get a shared reference to the value at `index` if it exists.
   pub fn get(&self, index: usize) -> Option<&T> {
     let inner = self.inner_ref();
     if index >= inner.slots.len() || inner.is_free(index) {
@@ -89,6 +99,7 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     }
   }
 
+  /// Get a mutable reference to the value at `index` if it exists.
   pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
     let inner = self.inner_mut();
     if index >= inner.slots.len() || inner.is_free(index) {
@@ -98,14 +109,17 @@ impl<T, A: Allocator> SlabAllocator<T, A> {
     }
   }
 
+  /// Number of occupied slots in the slab.
   pub fn len(&self) -> usize {
     self.inner_ref().len
   }
 
+  /// Check whether the slab contains no elements.
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
 
+  /// Total capacity of the underlying storage.
   pub fn capacity(&self) -> usize {
     self.inner_ref().slots.len()
   }

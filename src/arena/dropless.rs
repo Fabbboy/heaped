@@ -1,12 +1,24 @@
+//! An arena allocator that never calls `drop` on stored values.
+//!
+//! `DroplessArena` is useful for fast allocation of byte buffers where
+//! deallocation happens all at once when the arena is dropped.
+
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
 use core::ptr::NonNull;
 
 use crate::arena::base::Arena as BaseArena;
 
 #[derive(Debug)]
+/// Arena allocator for byte slices that does not run destructors.
 pub struct DroplessArena<'arena, A: Allocator = Global> {
+  /// Underlying arena implementation.
   base: BaseArena<'arena, u8, A, false>,
 }
 
@@ -14,12 +26,14 @@ impl<'arena, A> DroplessArena<'arena, A>
 where
   A: Allocator,
 {
+  /// Create a new arena using the given allocator and chunk capacity.
   pub fn new_in(allocator: A, chunk_cap: usize) -> Self {
     Self {
       base: BaseArena::new_in(allocator, chunk_cap),
     }
   }
 
+  /// Try to allocate a string slice within the arena.
   pub fn try_alloc_str(&self, value: &str) -> Result<&'arena mut str, AllocError> {
     let layout = Layout::array::<u8>(value.len()).map_err(|_| AllocError)?;
     let mem = self.allocate_zeroed(layout)?;
@@ -28,6 +42,7 @@ where
     Ok(unsafe { core::str::from_utf8_unchecked_mut(slice) })
   }
 
+  /// Allocate a string slice, panicking if allocation fails.
   pub fn alloc_str(&self, value: &str) -> &'arena mut str {
     self
       .try_alloc_str(value)
@@ -36,6 +51,7 @@ where
 }
 
 impl<'arena> DroplessArena<'arena, Global> {
+  /// Create a new arena backed by the global allocator.
   pub fn new(chunk_cap: usize) -> Self {
     Self::new_in(Global, chunk_cap)
   }

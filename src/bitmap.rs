@@ -1,3 +1,5 @@
+//! Bitmap structure for tracking fixed-size boolean flags.
+
 use core::ptr::NonNull;
 
 use alloc::alloc::{
@@ -7,20 +9,29 @@ use alloc::alloc::{
 };
 
 #[derive(Debug)]
+/// Errors that can occur while operating on a [`Bitmap`].
 pub enum BitmapError {
+  /// Index was outside the bitmap bounds.
   OutOfBounds,
+  /// Allocation from the underlying allocator failed.
   AllocError,
+  /// Requested size was not a multiple of 8.
   InvalidSize,
 }
 
 #[derive(Debug)]
+/// A dynamically sizable bitmap.
 pub struct Bitmap<'map, A = Global>
 where
   A: Allocator,
 {
+  /// Allocator used for backing storage.
   allocator: A,
+  /// Slice holding the bitmap bits.
   map: &'map mut [u8],
+  /// Layout used for the allocation.
   layout: Layout,
+  /// Number of bytes in the bitmap.
   fields: usize,
 }
 
@@ -28,6 +39,7 @@ impl<'map, A> Bitmap<'map, A>
 where
   A: Allocator,
 {
+  /// Try to create a new bitmap in the given allocator.
   pub fn try_new_in(allocator: A, size: usize) -> Result<Self, BitmapError> {
     if size % 8 != 0 {
       return Err(BitmapError::InvalidSize);
@@ -48,12 +60,14 @@ where
     })
   }
 
+  /// Create a new bitmap, panicking on failure.
   pub fn new_in(allocator: A, size: usize) -> Self {
     Self::try_new_in(allocator, size).expect("Failed to create Bitmap")
   }
 }
 
 impl<'map> Bitmap<'map, Global> {
+  /// Create a new bitmap using the global allocator.
   pub fn new(size: usize) -> Self {
     Self::new_in(Global, size)
   }
@@ -63,6 +77,7 @@ impl<'map, A> Bitmap<'map, A>
 where
   A: Allocator,
 {
+  /// Try to set the bit at the given index.
   pub fn try_set(&mut self, index: usize) -> Result<(), BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
@@ -73,10 +88,12 @@ where
     Ok(())
   }
 
+  /// Set the bit at the given index, panicking on out-of-bounds.
   pub fn set(&mut self, index: usize) {
     self.try_set(index).expect("Bitmap index out of bounds");
   }
 
+  /// Try to get the bit at the given index.
   pub fn try_get(&self, index: usize) -> Result<bool, BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
@@ -86,10 +103,12 @@ where
     Ok((self.map[byte_index] & (1 << bit_index)) != 0)
   }
 
+  /// Get the bit at the given index, panicking on out-of-bounds.
   pub fn get(&self, index: usize) -> bool {
     self.try_get(index).expect("Bitmap index out of bounds")
   }
 
+  /// Try to clear the bit at the given index.
   pub fn try_clear(&mut self, index: usize) -> Result<(), BitmapError> {
     if index >= self.fields * 8 {
       return Err(BitmapError::OutOfBounds);
@@ -100,10 +119,12 @@ where
     Ok(())
   }
 
+  /// Clear the bit at the given index, panicking on out-of-bounds.
   pub fn clear(&mut self, index: usize) {
     self.try_clear(index).expect("Bitmap index out of bounds");
   }
 
+  /// Try to resize the bitmap to a new bit count.
   pub fn try_resize(&mut self, new_size: usize) -> Result<(), BitmapError> {
     if new_size % 8 != 0 {
       return Err(BitmapError::InvalidSize);
@@ -130,12 +151,12 @@ where
     Ok(())
   }
 
+  /// Resize the bitmap, panicking on failure.
   pub fn resize(&mut self, new_size: usize) {
     self.try_resize(new_size).expect("Failed to resize Bitmap");
   }
 }
 
-//TODO: might leak investigate issues
 impl<'map, A> Drop for Bitmap<'map, A>
 where
   A: Allocator,
