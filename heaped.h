@@ -9,4 +9,42 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef struct Slice {
+  uint8_t *ptr;
+  size_t len;
+} Slice;
+
+typedef enum Option_Slice_Tag {
+  OPTION_SLICE_OPTION_SLICE_SOME_SLICE,
+  OPTION_SLICE_OPTION_SLICE_NONE_SLICE,
+} Option_Slice_Tag;
+
+typedef struct Option_Slice {
+  Option_Slice_Tag tag;
+  union {
+    struct {
+      struct Slice some;
+    };
+  };
+} Option_Slice;
+
+typedef struct Layout {
+  size_t size;
+  size_t align;
+} Layout;
+
+typedef struct Alloc {
+  void *self;
+  struct Option_Slice (*allocate)(void *self_, struct Layout layout);
+  void (*deallocate)(void *self_, struct Slice slice);
+} Alloc;
+
+struct Option_Slice global_allocate(void *_self, struct Layout layout);
+
+void global_deallocate(void *_self, struct Slice slice);
+
+struct Option_Slice alloc(struct Alloc *alloc, struct Layout layout);
+
+void dealloc(struct Alloc *alloc, struct Slice slice);
+
 #endif  /* HEAPED_H */

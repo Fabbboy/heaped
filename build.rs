@@ -23,8 +23,14 @@ fn main() {
       rename_associated_constant: cbindgen::RenameRule::QualifiedScreamingSnakeCase,
       ..Default::default()
     },
-    function: cbindgen::FunctionConfig {
-      postfix: Some("hp_".to_string()),
+    export: cbindgen::ExportConfig {
+      include: vec![
+        "Alloc".to_string(),
+        "Layout".to_string(),
+        "Slice".to_string(),
+        "Option".to_string(),
+        "GLOBAL_ALLOC".to_string(),
+      ],
       ..Default::default()
     },
     ..Default::default()
