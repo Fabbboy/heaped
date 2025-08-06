@@ -38,6 +38,12 @@ where
   T: Sized,
   A: Allocator,
 {
+  /// Run a closure with a reference to this arena.
+  /// This can help with lifetime management by ensuring the arena
+  /// outlives any references created within the closure.
+  pub fn with<R>(&self, f: impl FnOnce(&Self) -> R) -> R {
+    f(self)
+  }
   unsafe fn inner_mut(&self) -> &mut ArenaInner<T, A, DROP> {
     // SAFETY: callers ensure exclusive access
     unsafe { &mut *self.inner.get() }
