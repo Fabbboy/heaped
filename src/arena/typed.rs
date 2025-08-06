@@ -128,7 +128,13 @@ where
   }
 }
 
-impl<T, A> Drop for TypedArena<T, A>
+// SAFETY: The #[may_dangle] attribute is safe here because:
+// 1. We only call drop_in_place() on each T, running T's own destructor
+// 2. We never access or dereference any potential references that T might contain
+// 3. After dropping each T, we only deallocate memory - no further access to T
+// 4. The allocator A is not dangled, only T is allowed to dangle
+// 5. This mirrors the same safety pattern used in rustc_arena::TypedArena
+unsafe impl<#[may_dangle] T, A> Drop for TypedArena<T, A>
 where
   A: Allocator + Clone,
 {

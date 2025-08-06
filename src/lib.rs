@@ -6,6 +6,7 @@
 //! crates only, making them suitable for constrained environments.
 
 #![feature(allocator_api)]
+#![feature(dropck_eyepatch)]
 #![allow(clippy::module_inception, clippy::mut_from_ref)]
 
 extern crate alloc;
