@@ -67,3 +67,11 @@ fn typed_arena_multiple_chunks() {
   let b = arena.try_alloc(2u32).unwrap();
   assert_eq!((*a, *b), (1, 2));
 }
+
+#[test]
+fn typed_arena_zero_sized() {
+  let arena = TypedArena::new(1);
+  let a = arena.try_alloc(()).unwrap();
+  let b = arena.try_alloc(()).unwrap();
+  assert_eq!((*a, *b), ((), ()));
+}
