@@ -2,13 +2,24 @@
 
 extern crate alloc;
 
-use alloc::alloc::{AllocError, Allocator, Global, Layout};
+use alloc::alloc::{
+  AllocError,
+  Allocator,
+  Global,
+  Layout,
+};
 use core::{
   cell::UnsafeCell,
-  ptr::{self, NonNull},
+  ptr::{
+    self,
+    NonNull,
+  },
 };
 
-use crate::{arena::chunk::Chunk as RawChunk, once::Once};
+use crate::{
+  arena::chunk::Chunk as RawChunk,
+  once::Once,
+};
 
 type Chunk<T, A, const DROP: bool> = RawChunk<A, T, DROP>;
 
@@ -58,6 +69,31 @@ where
         head: Once::Uninit,
         layout,
       }),
+    }
+  }
+
+  pub fn leak(self) -> &'static Self {
+    let layout = Layout::new::<Self>();
+    let raw = Global
+      .allocate(layout)
+      .expect("arena leak allocation failed")
+      .as_ptr() as *mut Self;
+    // SAFETY: raw is valid for layout bytes
+    unsafe {
+      raw.write(self);
+      &*raw
+    }
+  }
+
+  pub unsafe fn recover(ptr: &'static Self) {
+    let layout = Layout::new::<Self>();
+    // SAFETY: ptr was allocated in `leak`
+    unsafe {
+      ptr::drop_in_place(ptr as *const Self as *mut Self);
+      Global.deallocate(
+        NonNull::new_unchecked(ptr as *const Self as *mut u8),
+        layout,
+      );
     }
   }
 
@@ -346,13 +382,13 @@ where
         let mut current = chunk.as_ptr();
         while !current.is_null() {
           let next = (&*current).next();
-          
+
           // Only call drop_in_place if DROP is true
           // This gives the borrow checker more flexibility with dropless arenas
           if DROP {
             ptr::drop_in_place(current);
           }
-          
+
           inner
             .allocator
             .deallocate(NonNull::new_unchecked(current as *mut u8), inner.layout);
