@@ -16,6 +16,7 @@ use core::{
   ptr::NonNull,
 };
 
+#[derive(Debug)]
 pub(crate) struct ArenaChunk<T, A = Global>
 where
   A: Allocator,

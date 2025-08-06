@@ -20,6 +20,7 @@ use super::{
   PAGE_SIZE,
 };
 
+#[derive(Debug)]
 pub struct DroplessArena<A = Global>
 where
   A: Allocator + Clone,

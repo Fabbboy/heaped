@@ -17,6 +17,7 @@ use super::{
   PAGE_SIZE,
 };
 
+#[derive(Debug)]
 pub struct TypedArena<T, A = Global>
 where
   A: Allocator + Clone,

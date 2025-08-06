@@ -11,6 +11,7 @@ use core::{
   ptr::NonNull,
 };
 
+#[derive(Debug)]
 struct FixedInner<'fixed> {
   mem: &'fixed mut [u8],
   used: usize,
