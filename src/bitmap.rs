@@ -41,7 +41,7 @@ where
 {
   /// Try to create a new bitmap in the given allocator.
   pub fn try_new_in(allocator: A, size: usize) -> Result<Self, BitmapError> {
-    if size % 8 != 0 {
+    if !size.is_multiple_of(8) {
       return Err(BitmapError::InvalidSize);
     }
 
@@ -126,7 +126,7 @@ where
 
   /// Try to resize the bitmap to a new bit count.
   pub fn try_resize(&mut self, new_size: usize) -> Result<(), BitmapError> {
-    if new_size % 8 != 0 {
+    if !new_size.is_multiple_of(8) {
       return Err(BitmapError::InvalidSize);
     }
     let new_fields = new_size / 8;
@@ -165,7 +165,7 @@ where
     let layout = self.layout;
     unsafe {
       self.allocator.deallocate(
-        NonNull::new(self.map.as_mut_ptr() as *mut u8).unwrap(),
+        NonNull::new(self.map.as_mut_ptr()).unwrap(),
         layout,
       );
     }

@@ -63,6 +63,9 @@ impl<'fixed> FixedAllocator<'fixed> {
   }
 
   /// Reset the allocator, forgetting all previous allocations.
+  ///
+  /// # Safety
+  /// Caller must ensure no allocated memory is still in use.
   pub unsafe fn reset(&self) {
     let inner = self.get_mut();
     inner.used = 0;

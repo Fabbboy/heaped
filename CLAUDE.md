@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Chat History
+
+Previous conversation histories are stored in dated text files (e.g., `2025-08-06.txt`) in the project root. These contain earlier development discussions and decisions that may provide useful context for ongoing work.
+
 ## Project Overview
 
 Heaped is a `no_std` compatible Rust library providing memory handling and allocation types. The library operates solely on `core` and `alloc` crates, making it suitable for constrained environments and embedded systems.
