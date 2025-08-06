@@ -178,6 +178,18 @@ impl LeakArena<Global> {
 // The arena will leak all memory when it goes out of scope.
 // This is intentional and eliminates borrow checker issues.
 
+unsafe impl<A: Allocator> Allocator for LeakArena<A> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        let ptr = self.alloc_bytes(layout.size(), layout.align())?;
+        let slice = unsafe { core::slice::from_raw_parts_mut(ptr, layout.size()) };
+        Ok(NonNull::from(slice))
+    }
+
+    unsafe fn deallocate(&self, _ptr: NonNull<u8>, _layout: Layout) {
+        // LeakArena never deallocates - this is a no-op
+    }
+}
+
 // Convenience type aliases
 pub type LeakDroplessArena = LeakArena<Global>;
 
