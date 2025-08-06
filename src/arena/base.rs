@@ -1,30 +1,20 @@
-//! Internal arena allocator backing [`TypedArena`] and [`DroplessArena`].
+//! Generic arena allocator.
 
 extern crate alloc;
 
-use alloc::alloc::{
-  AllocError,
-  Allocator,
-  Layout,
-};
+use alloc::alloc::{AllocError, Allocator, Global, Layout};
 use core::{
   cell::UnsafeCell,
-  ptr::{
-    self,
-    NonNull,
-  },
+  ptr::{self, NonNull},
 };
 
-use crate::{
-  arena::chunk::Chunk as RawChunk,
-  once::Once,
-};
+use crate::{arena::chunk::Chunk as RawChunk, once::Once};
 
 type Chunk<T, A, const DROP: bool> = RawChunk<A, T, DROP>;
 
 #[derive(Debug)]
-/// Core arena structure used by public arena types.
-pub(crate) struct Arena<T, A: Allocator, const DROP: bool>
+/// Core arena structure.
+pub struct Arena<T, A: Allocator, const DROP: bool>
 where
   T: Sized,
 {
@@ -53,7 +43,7 @@ where
     unsafe { &mut *self.inner.get() }
   }
 
-  pub(crate) fn new_in(allocator: A, chunk_cap: usize) -> Self {
+  pub fn new_in(allocator: A, chunk_cap: usize) -> Self {
     let layout = Layout::new::<Chunk<T, A, DROP>>();
     Self {
       inner: UnsafeCell::new(ArenaInner {
@@ -223,6 +213,117 @@ where
       );
     }
     Ok(new_block)
+  }
+}
+
+impl<T, const DROP: bool> Arena<T, Global, DROP>
+where
+  T: Sized,
+{
+  pub fn new(chunk_cap: usize) -> Self {
+    Self::new_in(Global, chunk_cap)
+  }
+}
+
+impl<T, A> Arena<T, A, true>
+where
+  T: Sized,
+  A: Allocator,
+{
+  pub fn try_alloc(&self, value: T) -> Result<&mut T, AllocError> {
+    let layout = Layout::new::<T>();
+    let raw = Allocator::allocate(self, layout)?;
+    let ptr = raw.as_ptr() as *mut T;
+    // SAFETY: ptr is valid for writes of T
+    unsafe {
+      ptr.write(value);
+      Ok(&mut *ptr)
+    }
+  }
+
+  pub fn alloc(&self, value: T) -> &mut T {
+    self
+      .try_alloc(value)
+      .expect("typed arena allocation failed")
+  }
+}
+
+impl<T, A> Arena<T, A, true>
+where
+  T: Sized + Clone,
+  A: Allocator,
+{
+  pub fn try_alloc_slice(&self, values: &[T]) -> Result<&mut [T], AllocError> {
+    let layout = Layout::array::<T>(values.len()).map_err(|_| AllocError)?;
+    let raw = Allocator::allocate(self, layout)?;
+    let ptr = raw.as_ptr() as *mut T;
+    // SAFETY: ptr is valid for values.len() items
+    unsafe {
+      for (i, v) in values.iter().enumerate() {
+        ptr.add(i).write(v.clone());
+      }
+      Ok(core::slice::from_raw_parts_mut(ptr, values.len()))
+    }
+  }
+
+  pub fn alloc_slice(&self, values: &[T]) -> &mut [T] {
+    self
+      .try_alloc_slice(values)
+      .expect("typed arena slice allocation failed")
+  }
+}
+
+impl<A> Arena<u8, A, false>
+where
+  A: Allocator,
+{
+  pub fn try_alloc_bytes(&self, data: &[u8]) -> Result<&mut [u8], AllocError> {
+    let layout = Layout::array::<u8>(data.len()).map_err(|_| AllocError)?;
+    let mut raw = Allocator::allocate(self, layout)?;
+    let slice = unsafe { raw.as_mut() };
+    slice.copy_from_slice(data);
+    Ok(slice)
+  }
+
+  pub fn alloc_bytes(&self, data: &[u8]) -> &mut [u8] {
+    self
+      .try_alloc_bytes(data)
+      .expect("dropless arena byte allocation failed")
+  }
+
+  pub fn try_alloc_str(&self, value: &str) -> Result<&mut str, AllocError> {
+    let slice = self.try_alloc_bytes(value.as_bytes())?;
+    // SAFETY: slice originates from valid utf8
+    unsafe { Ok(core::str::from_utf8_unchecked_mut(slice)) }
+  }
+
+  pub fn alloc_str(&self, value: &str) -> &mut str {
+    self
+      .try_alloc_str(value)
+      .expect("dropless arena str allocation failed")
+  }
+
+  pub fn try_alloc_slice<T>(&self, values: &[T]) -> Result<&mut [T], AllocError>
+  where
+    T: Copy,
+  {
+    let layout = Layout::array::<T>(values.len()).map_err(|_| AllocError)?;
+    let raw = Allocator::allocate(self, layout)?;
+    let ptr = raw.as_ptr() as *mut T;
+    // SAFETY: ptr is valid for values.len() items and T: Copy
+    unsafe {
+      ptr.copy_from_nonoverlapping(values.as_ptr(), values.len());
+      Ok(core::slice::from_raw_parts_mut(ptr, values.len()))
+    }
+  }
+
+  pub fn alloc_slice<T>(&self, values: &[T]) -> &mut [T]
+  where
+    T: Copy,
+  {
+    self
+      .try_alloc_slice(values)
+      .expect("dropless arena slice allocation failed")
   }
 }
 
