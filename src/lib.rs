@@ -10,7 +10,6 @@
 
 extern crate alloc;
 
-pub mod arena;
 pub mod bitmap;
 pub mod fixed;
 pub mod once;
