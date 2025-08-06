@@ -85,18 +85,26 @@ where
   }
 
   pub(crate) fn has_space(&self, layout: Layout) -> bool {
-    let inner = self.inner();
-    let remaining = inner.capacity - inner.len;
-    let needed = layout.size().div_ceil(mem::size_of::<T>());
-    remaining >= needed
+    if mem::size_of::<T>() == 0 {
+      true
+    } else {
+      let inner = self.inner();
+      let remaining = inner.capacity - inner.len;
+      let needed = layout.size().div_ceil(mem::size_of::<T>());
+      remaining >= needed
+    }
   }
 
   pub(crate) fn contains(&self, ptr: *mut u8) -> bool {
-    let inner = self.inner();
-    let start = inner.start as usize;
-    let end = inner.end as usize;
-    let ptr = ptr as usize;
-    ptr >= start && ptr < end
+    if mem::size_of::<T>() == 0 {
+      true
+    } else {
+      let inner = self.inner();
+      let start = inner.start as usize;
+      let end = inner.end as usize;
+      let ptr = ptr as usize;
+      ptr >= start && ptr < end
+    }
   }
 
   pub(crate) fn next(&self) -> Option<NonNull<Self>> {
@@ -118,39 +126,59 @@ where
   A: Allocator,
 {
   fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-    if !self.has_space(layout) {
-      return Err(AllocError);
+    if mem::size_of::<T>() == 0 {
+      let inner = unsafe { self.inner_mut() };
+      inner.len += 1;
+      let ptr = inner.storage.as_ptr() as *mut u8;
+      // SAFETY: ptr is suitably aligned and zero-sized
+      let slice = ptr::slice_from_raw_parts_mut(ptr, layout.size());
+      Ok(unsafe { NonNull::new_unchecked(slice) })
+    } else {
+      if !self.has_space(layout) {
+        return Err(AllocError);
+      }
+
+      let inner = unsafe { self.inner_mut() };
+      let needed = layout.size().div_ceil(mem::size_of::<T>());
+      let start = inner.len;
+      inner.len += needed;
+
+      let ptr = unsafe { inner.storage.as_ptr().add(start) as *mut u8 };
+      let byte_count = needed * mem::size_of::<T>();
+      // SAFETY: ptr is within storage and byte_count computed from capacity
+      Ok(unsafe { NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr, byte_count)) })
     }
-
-    let inner = unsafe { self.inner_mut() };
-    let needed = layout.size().div_ceil(mem::size_of::<T>());
-    let start = inner.len;
-    inner.len += needed;
-
-    let ptr = unsafe { inner.storage.as_ptr().add(start) as *mut u8 };
-    let byte_count = needed * mem::size_of::<T>();
-    // SAFETY: ptr is within storage and byte_count computed from capacity
-    Ok(unsafe { NonNull::new_unchecked(ptr::slice_from_raw_parts_mut(ptr, byte_count)) })
   }
 
   unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-    let inner = unsafe { self.inner_mut() };
-    let needed = layout.size().div_ceil(mem::size_of::<T>());
+    if mem::size_of::<T>() == 0 {
+      let inner = unsafe { self.inner_mut() };
+      if inner.len > 0 {
+        if DROP {
+          // SAFETY: ptr points to initialized zero-sized value
+          unsafe { (*inner.storage.as_ptr()).assume_init_drop() };
+        }
+        inner.len -= 1;
+      }
+    } else {
+      let inner = unsafe { self.inner_mut() };
+      let needed = layout.size().div_ceil(mem::size_of::<T>());
 
-    let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
-    let ptr_index = ptr_offset / mem::size_of::<T>();
+      let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
+      let ptr_index = ptr_offset / mem::size_of::<T>();
 
-    if ptr_index + needed == inner.len {
-      if DROP {
-        for i in ptr_index..inner.len {
-          // SAFETY: item_ptr points to an initialized entry
-          unsafe {
-            let item_ptr = inner.storage.as_ptr().add(i);
-            (*item_ptr).assume_init_drop();
+      if ptr_index + needed == inner.len {
+        if DROP {
+          for i in ptr_index..inner.len {
+            // SAFETY: item_ptr points to an initialized entry
+            unsafe {
+              let item_ptr = inner.storage.as_ptr().add(i);
+              (*item_ptr).assume_init_drop();
+            }
           }
         }
+        inner.len -= needed;
       }
-      inner.len -= needed;
     }
   }
 
@@ -160,28 +188,35 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let inner = unsafe { self.inner_mut() };
-    let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
-    let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
-    let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
-    let ptr_index = ptr_offset / mem::size_of::<T>();
+    if mem::size_of::<T>() == 0 {
+      let raw = ptr.as_ptr();
+      // SAFETY: raw is valid for zero-sized allocation
+      let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
+      Ok(unsafe { NonNull::new_unchecked(slice) })
+    } else {
+      let inner = unsafe { self.inner_mut() };
+      let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
+      let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
+      let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
+      let ptr_index = ptr_offset / mem::size_of::<T>();
 
-    if ptr_index + old_needed == inner.len {
-      let additional = new_needed.saturating_sub(old_needed);
-      if inner.capacity - inner.len >= additional {
-        inner.len = ptr_index + new_needed;
-        let raw = ptr.as_ptr();
-        // SAFETY: raw is valid for new_layout.size() bytes
-        let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
-        return Ok(unsafe { NonNull::new_unchecked(slice) });
+      if ptr_index + old_needed == inner.len {
+        let additional = new_needed.saturating_sub(old_needed);
+        if inner.capacity - inner.len >= additional {
+          inner.len = ptr_index + new_needed;
+          let raw = ptr.as_ptr();
+          // SAFETY: raw is valid for new_layout.size() bytes
+          let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
+          return Ok(unsafe { NonNull::new_unchecked(slice) });
+        }
       }
-    }
 
-    let new_ptr = self.allocate(new_layout)?;
-    unsafe {
-      ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, old_layout.size());
+      let new_ptr = self.allocate(new_layout)?;
+      unsafe {
+        ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, old_layout.size());
+      }
+      Ok(new_ptr)
     }
-    Ok(new_ptr)
   }
 
   unsafe fn shrink(
@@ -190,34 +225,41 @@ where
     old_layout: Layout,
     new_layout: Layout,
   ) -> Result<NonNull<[u8]>, AllocError> {
-    let inner = unsafe { self.inner_mut() };
-    let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
-    let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
-    let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
-    let ptr_index = ptr_offset / mem::size_of::<T>();
+    if mem::size_of::<T>() == 0 {
+      let raw = ptr.as_ptr();
+      // SAFETY: raw is valid for zero-sized allocation
+      let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
+      Ok(unsafe { NonNull::new_unchecked(slice) })
+    } else {
+      let inner = unsafe { self.inner_mut() };
+      let old_needed = old_layout.size().div_ceil(mem::size_of::<T>());
+      let new_needed = new_layout.size().div_ceil(mem::size_of::<T>());
+      let ptr_offset = ptr.as_ptr() as usize - inner.storage.as_ptr() as usize;
+      let ptr_index = ptr_offset / mem::size_of::<T>();
 
-    if ptr_index + old_needed == inner.len {
-      if DROP {
-        for i in ptr_index + new_needed..inner.len {
-          // SAFETY: item_ptr points to an initialized entry
-          unsafe {
-            let item_ptr = inner.storage.as_ptr().add(i);
-            (*item_ptr).assume_init_drop();
+      if ptr_index + old_needed == inner.len {
+        if DROP {
+          for i in ptr_index + new_needed..inner.len {
+            // SAFETY: item_ptr points to an initialized entry
+            unsafe {
+              let item_ptr = inner.storage.as_ptr().add(i);
+              (*item_ptr).assume_init_drop();
+            }
           }
         }
+        inner.len = ptr_index + new_needed;
+        let raw = ptr.as_ptr();
+        // SAFETY: raw is valid for new_layout.size() bytes
+        let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
+        return Ok(unsafe { NonNull::new_unchecked(slice) });
       }
-      inner.len = ptr_index + new_needed;
-      let raw = ptr.as_ptr();
-      // SAFETY: raw is valid for new_layout.size() bytes
-      let slice = ptr::slice_from_raw_parts_mut(raw, new_layout.size());
-      return Ok(unsafe { NonNull::new_unchecked(slice) });
-    }
 
-    let new_ptr = self.allocate(new_layout)?;
-    unsafe {
-      ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, new_layout.size());
+      let new_ptr = self.allocate(new_layout)?;
+      unsafe {
+        ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr() as *mut u8, new_layout.size());
+      }
+      Ok(new_ptr)
     }
-    Ok(new_ptr)
   }
 }
 
@@ -229,11 +271,18 @@ where
   fn drop(&mut self) {
     let inner = unsafe { self.inner_mut() };
     if DROP {
-      for i in 0..inner.len {
-        // SAFETY: ptr points to an initialized entry
-        unsafe {
-          let ptr = inner.storage.as_ptr().add(i);
-          (*ptr).assume_init_drop();
+      if mem::size_of::<T>() == 0 {
+        for _ in 0..inner.len {
+          // SAFETY: ptr points to an initialized zero-sized value
+          unsafe { (*inner.storage.as_ptr()).assume_init_drop() };
+        }
+      } else {
+        for i in 0..inner.len {
+          // SAFETY: ptr points to an initialized entry
+          unsafe {
+            let ptr = inner.storage.as_ptr().add(i);
+            (*ptr).assume_init_drop();
+          }
         }
       }
     }
