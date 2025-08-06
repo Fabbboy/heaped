@@ -13,6 +13,5 @@ extern crate alloc;
 pub mod arena;
 pub mod bitmap;
 pub mod fixed;
-pub mod leak;
 pub mod once;
 pub mod slab;
