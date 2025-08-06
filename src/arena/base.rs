@@ -346,7 +346,13 @@ where
         let mut current = chunk.as_ptr();
         while !current.is_null() {
           let next = (&*current).next();
-          ptr::drop_in_place(current);
+          
+          // Only call drop_in_place if DROP is true
+          // This gives the borrow checker more flexibility with dropless arenas
+          if DROP {
+            ptr::drop_in_place(current);
+          }
+          
           inner
             .allocator
             .deallocate(NonNull::new_unchecked(current as *mut u8), inner.layout);
