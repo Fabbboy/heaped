@@ -20,28 +20,25 @@ use crate::arena::base::Arena as BaseArena;
 
 #[derive(Debug)]
 /// Arena allocator that stores values of type `T`.
-pub struct TypedArena<'arena, T, A: Allocator = Global>
+pub struct TypedArena<T, A: Allocator = Global>
 where
   T: Sized,
 {
-  /// Underlying arena implementation.
-  base: BaseArena<'arena, T, A, true>,
+  base: BaseArena<T, A, true>,
 }
 
-impl<'arena, T, A> TypedArena<'arena, T, A>
+impl<T, A> TypedArena<T, A>
 where
   T: Sized,
   A: Allocator,
 {
-  /// Create a new arena using the given allocator and chunk capacity.
   pub fn new_in(allocator: A, chunk_cap: usize) -> Self {
     Self {
       base: BaseArena::new_in(allocator, chunk_cap),
     }
   }
 
-  /// Try to allocate a value within the arena.
-  pub fn try_alloc(&self, value: T) -> Result<&'arena mut T, AllocError> {
+  pub fn try_alloc<'a>(&'a self, value: T) -> Result<&'a mut T, AllocError> {
     let layout = Layout::new::<T>();
     let raw = self.base.allocate(layout)?;
     let ptr = raw.as_ptr() as *mut T;
@@ -51,25 +48,23 @@ where
     }
   }
 
-  /// Allocate a value, panicking if allocation fails.
-  pub fn alloc(&self, value: T) -> &'arena mut T {
+  pub fn alloc<'a>(&'a self, value: T) -> &'a mut T {
     self
       .try_alloc(value)
       .expect("Failed to allocate in TypedArena")
   }
 }
 
-impl<'arena, T> TypedArena<'arena, T, Global>
+impl<T> TypedArena<T, Global>
 where
   T: Sized,
 {
-  /// Create a new arena backed by the global allocator.
   pub fn new(chunk_cap: usize) -> Self {
     Self::new_in(Global, chunk_cap)
   }
 }
 
-unsafe impl<'arena, T, A> Allocator for TypedArena<'arena, T, A>
+unsafe impl<T, A> Allocator for TypedArena<T, A>
 where
   T: Sized,
   A: Allocator,

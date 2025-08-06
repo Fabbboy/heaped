@@ -20,41 +20,41 @@ use crate::{
   once::Once,
 };
 
-type Chunk<'arena, T, A, const DROP: bool> = RawChunk<&'arena A, T, DROP>;
+type Chunk<T, A, const DROP: bool> = RawChunk<A, T, DROP>;
 
 #[derive(Debug)]
 /// Core arena structure used by public arena types.
-pub(crate) struct Arena<'arena, T, A: Allocator, const DROP: bool>
+pub(crate) struct Arena<T, A: Allocator, const DROP: bool>
 where
   T: Sized,
 {
   /// Interior mutable state of the arena.
-  inner: UnsafeCell<ArenaInner<'arena, T, A, DROP>>,
+  inner: UnsafeCell<ArenaInner<T, A, DROP>>,
 }
 
 #[derive(Debug)]
-struct ArenaInner<'arena, T, A: Allocator, const DROP: bool>
+struct ArenaInner<T, A: Allocator, const DROP: bool>
 where
   T: Sized,
 {
   allocator: A,
   chunk_cap: usize,
-  head: Once<NonNull<Chunk<'arena, T, A, DROP>>>,
+  head: Once<NonNull<Chunk<T, A, DROP>>>,
   layout: Layout,
 }
 
-impl<'arena, T, A, const DROP: bool> Arena<'arena, T, A, DROP>
+impl<T, A, const DROP: bool> Arena<T, A, DROP>
 where
   T: Sized,
   A: Allocator,
 {
-  unsafe fn inner_mut(&self) -> &mut ArenaInner<'arena, T, A, DROP> {
+  unsafe fn inner_mut(&self) -> &mut ArenaInner<T, A, DROP> {
     // SAFETY: callers ensure exclusive access
     unsafe { &mut *self.inner.get() }
   }
 
   pub(crate) fn new_in(allocator: A, chunk_cap: usize) -> Self {
-    let layout = Layout::new::<Chunk<'arena, T, A, DROP>>();
+    let layout = Layout::new::<Chunk<T, A, DROP>>();
     Self {
       inner: UnsafeCell::new(ArenaInner {
         allocator,
@@ -67,13 +67,12 @@ where
 
   fn alloc_chunk(
     &self,
-    inner: &mut ArenaInner<'arena, T, A, DROP>,
-    prev: Option<NonNull<Chunk<'arena, T, A, DROP>>>,
-  ) -> Result<NonNull<Chunk<'arena, T, A, DROP>>, AllocError> {
+    inner: &mut ArenaInner<T, A, DROP>,
+    prev: Option<NonNull<Chunk<T, A, DROP>>>,
+  ) -> Result<NonNull<Chunk<T, A, DROP>>, AllocError> {
     let chunk_ptr = inner.allocator.allocate(inner.layout)?;
-    let chunk = chunk_ptr.as_ptr() as *mut Chunk<'arena, T, A, DROP>;
-    let allocator: &'arena A = unsafe { &*(&inner.allocator as *const A) };
-    // SAFETY: chunk points to memory large enough for Chunk
+    let chunk = chunk_ptr.as_ptr() as *mut Chunk<T, A, DROP>;
+    let allocator = &inner.allocator as *const A;
     let non_null = unsafe {
       chunk.write(RawChunk::new(allocator, inner.chunk_cap));
       NonNull::new_unchecked(chunk)
@@ -227,7 +226,7 @@ where
   }
 }
 
-impl<'arena, T, A, const DROP: bool> Drop for Arena<'arena, T, A, DROP>
+impl<T, A, const DROP: bool> Drop for Arena<T, A, DROP>
 where
   T: Sized,
   A: Allocator,
@@ -251,7 +250,7 @@ where
   }
 }
 
-unsafe impl<'arena, T, A, const DROP: bool> Allocator for Arena<'arena, T, A, DROP>
+unsafe impl<T, A, const DROP: bool> Allocator for Arena<T, A, DROP>
 where
   T: Sized,
   A: Allocator,
